@@ -106,6 +106,10 @@ export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
 
 Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
 
+**Best for:** Reading a specific page you already know -- docs pages, API references, blog posts, single articles. Cheapest option when you just need one URL's content.
+
+**Avoid when:** You need content from many pages (use crawl), don't know which URLs to target (use map or search), or need interactive login/form filling (use interact).
+
 ```json
 { "url": "https://example.com", "formats": ["markdown"] }
 ```
@@ -113,6 +117,10 @@ Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
 ### firecrawl_crawl -- 1 credit/page
 
 Start a site crawl job and return the Firecrawl job id.
+
+**Best for:** Ingesting an entire documentation site, blog archive, or product catalog. Set `limit` and `maxDepth` to control scope. Works well for building a knowledge base from a website.
+
+**Avoid when:** You only need 1-3 pages (use scrape), need to discover what pages exist first (use map), or the site requires login (use interact).
 
 ```json
 { "url": "https://example.com", "limit": 10, "scrapeOptions": { "formats": ["markdown"] } }
@@ -122,6 +130,8 @@ Start a site crawl job and return the Firecrawl job id.
 
 Check a crawl job status and retrieve completed crawl data.
 
+**Best for:** Polling a crawl started with firecrawl_crawl. Crawl jobs run async -- use this to check progress and collect results when complete.
+
 ```json
 { "id": "crawl-job-id" }
 ```
@@ -129,6 +139,10 @@ Check a crawl job status and retrieve completed crawl data.
 ### firecrawl_map -- 1 credit/call
 
 Discover URLs for a site.
+
+**Best for:** Mapping a site's structure before deciding what to scrape. Use it to find all product pages, all blog posts, or all API docs on a domain. Much faster than crawl for URL discovery.
+
+**Avoid when:** You already know the exact URLs (use scrape), or you need the actual page content (use crawl or scrape after mapping).
 
 ```json
 { "url": "https://example.com", "limit": 20 }
@@ -138,6 +152,10 @@ Discover URLs for a site.
 
 Search the web through Firecrawl and optionally scrape result pages.
 
+**Best for:** Finding pages about a topic when you don't know which site to look at. Good for competitor research, finding documentation, or discovering relevant articles. The `scrapeOptions` param lets you get full content of results in one call.
+
+**Avoid when:** You already have the URL (use scrape), or you need to crawl an entire site systematically (use crawl).
+
 ```json
 { "query": "firecrawl documentation", "limit": 5 }
 ```
@@ -145,6 +163,10 @@ Search the web through Firecrawl and optionally scrape result pages.
 ### firecrawl_agent -- 5 free/day, then dynamic
 
 Autonomous AI-powered web data extraction. Provide a prompt and optional URLs; the agent navigates, scrapes, and extracts structured data.
+
+**Best for:** Complex extraction tasks where a simple scrape isn't enough -- multi-page data collection, sites that require navigation/clicking, pulling structured data from messy pages, or when you need a specific JSON schema filled. The agent figures out how to get the data on its own.
+
+**Avoid when:** You just need raw page content (use scrape -- it's 50x cheaper), the page is simple and static, or you're on a tight credit budget (agent can consume hundreds of credits per run).
 
 ```json
 {
@@ -162,10 +184,13 @@ Parameters:
 - `maxCredits` -- Credit budget (default 2500).
 - `strictConstrainToURLs` -- Only visit provided URLs.
 - `model` -- `spark-1-mini` (default, cheaper) or `spark-1-pro` (higher accuracy).
-
 ### firecrawl_parse -- 1 credit/page
 
 Upload a local file (PDF, DOCX, XLSX, HTML) and parse it into clean markdown or structured JSON.
+
+**Best for:** Processing documents you already have locally -- PDFs, Word docs, spreadsheets. Good for feeding paper PDFs, contract docs, or data spreadsheets into your agent's context. Uses Firecrawl's Rust engine so it's fast and preserves table structure.
+
+**Avoid when:** The document is publicly accessible by URL (use scrape instead -- it auto-detects file type from the URL and costs the same).
 
 ```json
 {
@@ -186,6 +211,10 @@ Parameters:
 ### firecrawl_interact -- 2 credits/minute
 
 Create a Firecrawl browser session for interactive web tasks. Returns a CDP URL for browser control and live view URLs.
+
+**Best for:** Sites that require login, multi-step forms, JavaScript-heavy SPAs that don't render with simple fetch, or any task where you need to click, type, and scroll. The session persists if you set a profile name.
+
+**Avoid when:** The page works fine without login or interaction (use scrape -- it's 100x cheaper). Interact is the most expensive tool at 2 credits/minute, so use it only when scraping can't reach the content.
 
 ```json
 {

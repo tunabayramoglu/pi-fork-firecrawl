@@ -1,66 +1,51 @@
-# 🔥 pi-firecrawl — Firecrawl Web Scraping Tools for Pi Agents
+# pi-firecrawl-multikey
 
-[![npm](https://img.shields.io/npm/v/@narumitw/pi-firecrawl)](https://www.npmjs.com/package/@narumitw/pi-firecrawl) [![Pi extension](https://img.shields.io/badge/Pi-extension-blue)](https://pi.dev) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+Fork of [`@narumitw/pi-firecrawl`](https://github.com/narumiruna/pi-extensions/tree/main/extensions/pi-firecrawl) with **multi-key rotation** and **quota-aware fallback** for multiple Firecrawl accounts.
 
-`@narumitw/pi-firecrawl` is a native [Pi coding agent](https://pi.dev) extension that exposes [Firecrawl](https://www.firecrawl.dev/) scraping, crawling, URL discovery, and search APIs as Pi tools.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-Use it to give your AI coding agent reliable web research capabilities for documentation lookup, website audits, competitive research, content extraction, and retrieval-friendly markdown scraping.
+## What this adds on top of the original
 
-## ✨ Features
+| Feature | Original | This fork |
+|---|---|---|
+| API keys | Single key via env var | Multiple keys from config + env fallback |
+| Quota awareness | None (reacts to 429 only) | Proactive credit check via Firecrawl API on startup |
+| Key rotation | None | Auto-rotate on 429, retry with next key |
+| Usage tracking | None | Local persistence across restarts |
+| Strategies | N/A | `quota-first`, `priority`, `round-robin` |
+| Tools | scrape, crawl, crawl_status, map, search | + **agent**, **parse**, **interact** |
 
-- Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
-- Start Firecrawl crawl jobs from Pi.
-- Check crawl job status and retrieve completed crawl data.
-- Discover URLs with Firecrawl map.
-- Search the web and optionally scrape search result pages.
- Supports Firecrawl API endpoint overrides.
- Multi-key rotation with proactive quota checking across multiple Firecrawl accounts.
-- Shows statusline activity only while Firecrawl tools are running.
-- Provides a `/firecrawl` menu with configuration help and tool controls.
-- Provides a Plan-mode-style selector for choosing individual Firecrawl tools.
-- Persists the selected Firecrawl tools across Pi restarts.
- Never logs, displays, or stores your Firecrawl API keys.
-
-## 📦 Install
+## Install
 
 ```bash
-pi install npm:@narumitw/pi-firecrawl
+pi install npm:@tuna-bayramoglu/pi-firecrawl-multikey
 ```
 
 Try without installing permanently:
 
 ```bash
-FIRECRAWL_API_KEY=fc-... pi -e npm:@narumitw/pi-firecrawl
+FIRECRAWL_API_KEY=fc-... pi -e npm:@tuna-bayramoglu/pi-firecrawl-multikey
 ```
 
-Try this package locally from the repository root:
+## Configuration
 
-```bash
-FIRECRAWL_API_KEY=fc-... pi -e ./extensions/pi-firecrawl
-```
-
-## ⚙️ Configuration
-
-Set a Firecrawl API key before running Pi:
+### Single key (env var)
 
 ```bash
 export FIRECRAWL_API_KEY=fc-your-key
 ```
 
-Optional API endpoint override:
+### Multi-key (config file)
 
-```bash
-export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
-```
-
-`FIRECRAWL_BASE_URL` is also accepted for compatibility. The extension never logs or displays the API key.
-### Multi-key rotation
-
-For accounts with multiple Firecrawl API keys (different accounts = independent quota pools), add a `keys` array to `pi-firecrawl.json`:
+Add a `keys` array to `~/.pi/agent/pi-firecrawl.json`:
 
 ```json
 {
-  "tools": ["firecrawl_scrape", "firecrawl_crawl", "firecrawl_crawl_status", "firecrawl_map", "firecrawl_search"],
+  "tools": [
+    "firecrawl_scrape", "firecrawl_crawl", "firecrawl_crawl_status",
+    "firecrawl_map", "firecrawl_search",
+    "firecrawl_agent", "firecrawl_parse", "firecrawl_interact"
+  ],
   "keys": [
     {
       "name": "primary",
@@ -83,137 +68,174 @@ For accounts with multiple Firecrawl API keys (different accounts = independent 
 ```
 
 **Strategy options:**
-- `quota-first` (default) — select the key with the most remaining credits, then by priority.
-- `priority` — always select by lowest priority number first.
-- `round-robin` — rotate through keys oldest-first.
+
+- `quota-first` (default) -- select the key with the most remaining credits, then by priority.
+- `priority` -- always select by lowest priority number first.
+- `round-robin` -- rotate through keys oldest-first.
 
 **How it works:**
-1. On startup, quota-checks all keys via the Firecrawl Credit Usage API.
+
+1. On startup, quota-checks all keys via `GET https://api.firecrawl.dev/v2/team/credit-usage`.
 2. Selects the key with the most remaining credits (or highest priority).
 3. On 429 + quota error, marks the key exhausted and retries with the next available key.
 4. Usage is tracked locally in `~/.pi/agent/firecrawl-usage.json` across restarts.
 5. The `FIRECRAWL_API_KEY` env var is used as a lowest-priority fallback if no config keys are present.
 
+### Optional endpoint override
 
-## 🛠️ Pi tools
+```bash
+export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
+```
 
-- `firecrawl_scrape` — scrape a single URL and return requested formats such as markdown, HTML, links, screenshots, or JSON.
-- `firecrawl_crawl` — start a site crawl job and return the Firecrawl job id.
-- `firecrawl_crawl_status` — check a crawl job status and retrieve completed crawl data.
-- `firecrawl_map` — discover URLs for a site.
-- `firecrawl_search` — search the web through Firecrawl and optionally scrape result pages.
+`FIRECRAWL_BASE_URL` is also accepted.
 
-All tools fail with a clear configuration error when `FIRECRAWL_API_KEY` is missing.
+## Tools
 
-## 💬 Command
+### firecrawl_scrape
+
+Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
+
+```json
+{ "url": "https://example.com", "formats": ["markdown"] }
+```
+
+### firecrawl_crawl
+
+Start a site crawl job and return the Firecrawl job id.
+
+```json
+{ "url": "https://example.com", "limit": 10, "scrapeOptions": { "formats": ["markdown"] } }
+```
+
+### firecrawl_crawl_status
+
+Check a crawl job status and retrieve completed crawl data.
+
+```json
+{ "id": "crawl-job-id" }
+```
+
+### firecrawl_map
+
+Discover URLs for a site.
+
+```json
+{ "url": "https://example.com", "limit": 20 }
+```
+
+### firecrawl_search
+
+Search the web through Firecrawl and optionally scrape result pages.
+
+```json
+{ "query": "firecrawl documentation", "limit": 5 }
+```
+
+### firecrawl_agent
+
+Autonomous AI-powered web data extraction. Provide a prompt and optional URLs; the agent navigates, scrapes, and extracts structured data.
+
+```json
+{
+  "prompt": "Extract all product names, prices, and descriptions from this page",
+  "urls": ["https://example.com/products"],
+  "model": "spark-1-mini",
+  "maxCredits": 500
+}
+```
+
+Parameters:
+- `prompt` (required) -- What data to extract. Be specific.
+- `urls` -- URLs to constrain the agent to.
+- `schema` -- JSON schema for structured output.
+- `maxCredits` -- Credit budget (default 2500).
+- `strictConstrainToURLs` -- Only visit provided URLs.
+- `model` -- `spark-1-mini` (default, cheaper) or `spark-1-pro` (higher accuracy).
+
+### firecrawl_parse
+
+Upload a local file (PDF, DOCX, XLSX, HTML) and parse it into clean markdown or structured JSON.
+
+```json
+{
+  "file": "<base64-encoded-file-content>",
+  "fileName": "report.pdf",
+  "formats": ["markdown"],
+  "parsers": [{ "type": "pdf", "mode": "auto", "maxPages": 100 }]
+}
+```
+
+Parameters:
+- `file` (required) -- Base64-encoded file content.
+- `fileName` -- Original filename with extension.
+- `formats` -- Output formats.
+- `onlyMainContent` -- Exclude headers/navs/footers.
+- `parsers` -- Parser config (e.g. PDF mode: fast/auto/ocr).
+
+### firecrawl_interact
+
+Create a Firecrawl browser session for interactive web tasks. Returns a CDP URL for browser control and live view URLs.
+
+```json
+{
+  "ttl": 120,
+  "activityTtl": 60,
+  "profile": { "name": "my-session", "saveChanges": true }
+}
+```
+
+Parameters:
+- `ttl` -- Session lifetime in seconds (30-3600, default 600).
+- `activityTtl` -- Inactivity timeout (10-3600, default 300).
+- `profile` -- Persistent storage config across sessions.
+
+## Command
 
 ```text
 /firecrawl
 ```
 
-Opens a menu with configuration quick start, command usage, tool status, controls for enabling
-or disabling all Firecrawl tools, and a selector for choosing individual tools.
-
-Direct subcommands are also available:
+Opens a menu with configuration, tool status, and controls.
 
 ```text
-/firecrawl help
-/firecrawl config
-/firecrawl quickstart
-/firecrawl status
-/firecrawl tools
-/firecrawl toggle
-/firecrawl enable
-/firecrawl disable
+/firecrawl help       -- show command usage
+/firecrawl config     -- show API key presence and URL
+/firecrawl status     -- show tool and settings status
+/firecrawl tools      -- select individual Firecrawl tools
+/firecrawl enable     -- enable all tools
+/firecrawl disable    -- disable all tools
 ```
 
-- `help` shows command usage.
-- `config` shows API-key presence and API URL without displaying the API key value.
-- `quickstart` is an alias for `config`.
-- `status` shows runtime tool state, persisted selection, settings file path, API-key presence,
-  API URL, and active non-Firecrawl tool count.
-- `tools` opens a Plan-mode-style selector for choosing individual `firecrawl_*` tools.
-- `toggle` is an alias for `tools`.
-- `enable` enables all `firecrawl_*` tools for future turns.
-- `disable` disables all `firecrawl_*` tools for future turns. The slash command remains
-  available.
+## CI/CD
 
-The selected tool names are saved to:
+A GitHub Actions workflow (`upstream-check.yml`) runs daily to verify:
 
-```text
-${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-firecrawl.json
-```
+- Upstream `narumiruna/pi-extensions` hasn't broken our fork
+- TypeScript compiles cleanly
+- All 8 tool definitions are present and valid
+- Multi-key client logic works
 
-When the file is missing or invalid, the extension preserves Pi's current active-tool policy
-instead of enabling tools by itself. A valid saved selection is restored on Pi startup and
-`/reload`. The settings file stores only tool names and a timestamp; it never stores
-`FIRECRAWL_API_KEY`, request headers, or other secrets.
+On failure, it automatically creates a GitHub issue.
 
-Compatibility: older versions used `pi-firecrawl-settings.json`. During the migration window,
-a legacy-only file is automatically migrated to `pi-firecrawl.json` with a warning. If both
-files exist, `pi-firecrawl.json` wins and the legacy file is ignored. The legacy filename is
-deprecated and will be removed in a future major release.
-
-## 🚀 Examples
-
-Scrape a page as markdown:
-
-```json
-{
-  "url": "https://example.com",
-  "formats": ["markdown"]
-}
-```
-
-Map a small site:
-
-```json
-{
-  "url": "https://example.com",
-  "limit": 20
-}
-```
-
-Start a crawl with markdown extraction:
-
-```json
-{
-  "url": "https://example.com",
-  "limit": 10,
-  "scrapeOptions": {
-    "formats": ["markdown"]
-  }
-}
-```
-
-## 🧠 Use cases
-
-- Research documentation from inside Pi.
-- Crawl websites for migration or audit tasks.
-- Extract clean markdown for AI context.
-- Discover URLs before scraping a site.
-- Combine web search with coding-agent implementation work.
-
-## 🗂️ Package layout
+## Package layout
 
 ```txt
-extensions/pi-firecrawl/
-├── src/
-│   ├── index.ts      # Pi package entrypoint
-│   ├── firecrawl.ts  # Extension registration and command orchestration
-│   └── *.ts          # Package-local client, settings, selector, and tool modules
-├── README.md
-├── LICENSE
-├── tsconfig.json
-└── package.json
+src/
+  index.ts        # Pi package entrypoint
+  firecrawl.ts    # Extension registration and command orchestration
+  client.ts       # Multi-key manager, HTTP client, quota checking
+  settings.ts     # Settings persistence and migration
+  tool-selector.ts # Tool selection UI
+  tools.ts        # All 8 tool definitions
+test/
+  firecrawl.test.ts
+  support.ts
 ```
 
-`index.ts` is the Pi entrypoint and forwards to `firecrawl.ts`; the other source modules are internal.
+## Upstream
 
-## 🔎 Keywords
+Forked from `@narumitw/pi-firecrawl` v0.30.1 ([source](https://github.com/narumiruna/pi-extensions/tree/main/extensions/pi-firecrawl)).
 
-Pi extension, Pi coding agent, Firecrawl, web scraping, web crawling, URL discovery, web search, markdown extraction, AI research agent, TypeScript Pi tools.
-
-## 📄 License
+## License
 
 MIT. See [`LICENSE`](./LICENSE).

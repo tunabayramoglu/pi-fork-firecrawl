@@ -8,6 +8,9 @@ export const FIRECRAWL_TOOL_NAMES = [
 	"firecrawl_crawl_status",
 	"firecrawl_map",
 	"firecrawl_search",
+	"firecrawl_agent",
+	"firecrawl_parse",
+	"firecrawl_interact",
 ] as const;
 export type FirecrawlToolName = (typeof FIRECRAWL_TOOL_NAMES)[number];
 
@@ -180,6 +183,188 @@ export const searchTool = defineTool({
 	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 		return withStatus(ctx, "search", async () => {
 			const payload = await firecrawlRequest("POST", "/search", cleanObject(params), signal);
+			return jsonResult(payload);
+		});
+	},
+});
+
+// ─── New Tools ───────────────────────────────────────────────────────────────
+
+export const agentTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[5],
+	label: "Firecrawl: Agent",
+	description:
+		"Autonomous AI-powered web data extraction. Provide a prompt and optional URLs; the agent navigates, scrapes, and extracts structured data.",
+	promptSnippet: "Autonomous Firecrawl agent for agentic data extraction",
+	promptGuidelines: [
+		"Use firecrawl_agent when you need to extract structured data from multiple pages or complex sites where a simple scrape is insufficient.",
+		"The agent can navigate, click, scroll, and extract data autonomously based on your prompt.",
+		"Provide a JSON schema in the 'schema' field to get structured output matching your desired format.",
+	],
+	parameters: Type.Object({
+		prompt: Type.String({
+			description:
+				"The prompt describing what data to extract. Be specific about what you want.",
+			maxLength: 10000,
+		}),
+		urls: Type.Optional(
+			Type.Array(Type.String(), {
+				description: "Optional list of URLs to constrain the agent to.",
+			}),
+		),
+		schema: Type.Optional(
+			Type.Any({
+				description:
+					"Optional JSON schema to structure the extracted data. The agent will return data matching this schema.",
+			}),
+		),
+		maxCredits: Type.Optional(
+			Type.Number({
+				description:
+					"Maximum credits to spend on this agent task. Defaults to 2500 if not set. Values above 2500 are always billed as paid requests.",
+			}),
+		),
+		strictConstrainToURLs: Type.Optional(
+			Type.Boolean({
+				description:
+					"If true, agent will only visit URLs provided in the urls array. Default false.",
+			}),
+		),
+		model: Type.Optional(
+			Type.String({
+				description:
+					"The model to use for the agent task. spark-1-mini (default) is 60% cheaper; spark-1-pro offers higher accuracy for complex tasks.",
+				enum: ["spark-1-mini", "spark-1-pro"],
+			}),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "agent", async () => {
+			const payload = await firecrawlRequest("POST", "/agent", cleanObject(params), signal);
+			return jsonResult(payload);
+		});
+	},
+});
+
+export const parseTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[6],
+	label: "Firecrawl: Parse",
+	description:
+		"Upload a local file (PDF, DOCX, XLSX, HTML) and parse it into clean markdown or structured JSON.",
+	promptSnippet: "Parse uploaded files via Firecrawl",
+	promptGuidelines: [
+		"Use firecrawl_parse when you need to convert a local file into markdown or structured data.",
+		"Supports PDF, DOCX, XLSX, HTML, and other document formats.",
+		"Provide the file as a base64-encoded string in the 'file' parameter.",
+	],
+	parameters: Type.Object({
+		file: Type.String({
+			description:
+				"Base64-encoded file content. The file will be parsed by Firecrawl's Rust-based engine.",
+		}),
+		fileName: Type.Optional(
+			Type.String({ description: "Original filename with extension (e.g. report.pdf)." }),
+		),
+		formats: Type.Optional(
+			Type.Array(
+				Type.String({
+					description:
+						"Requested output formats: markdown, html, rawHtml, links, screenshot, or json.",
+				}),
+				{ description: "Output formats. Defaults to Firecrawl's API default." },
+			),
+		),
+		onlyMainContent: Type.Optional(
+			Type.Boolean({ description: "Return only the main content excluding headers, navs, footers." }),
+		),
+		includeTags: Type.Optional(StringArray),
+		excludeTags: Type.Optional(StringArray),
+		timeout: Type.Optional(
+			Type.Number({ description: "Timeout in milliseconds. Default 30000, max 300000." }),
+		),
+		parsers: Type.Optional(
+			Type.Array(
+				Type.Any({
+					description:
+						'Controls parser behavior. Example: [{ "type": "pdf", "mode": "auto", "maxPages": 100 }]',
+				}),
+			),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "parse", async () => {
+			const { file, fileName, ...options } = params;
+
+			const binaryData = Buffer.from(file, "base64");
+			const formData = new FormData();
+			const blob = new Blob([binaryData]);
+			formData.append("file", blob, fileName ?? "uploaded-file");
+
+			if (Object.keys(cleanObject(options)).length > 0) {
+				formData.append("options", JSON.stringify(cleanObject(options)));
+			}
+
+			const payload = await firecrawlRequest(
+				"POST",
+				"/parse",
+				{ _multipart: formData } as unknown,
+				signal,
+			);
+			return jsonResult(payload);
+		});
+	},
+});
+
+export const interactTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[7],
+	label: "Firecrawl: Interact",
+	description:
+		"Create a Firecrawl browser session for interactive web tasks. Returns a CDP URL for browser control and live view URLs.",
+	promptSnippet: "Create a Firecrawl browser interact session",
+	promptGuidelines: [
+		"Use firecrawl_interact when you need to create a browser session for interactive web tasks like login flows, form submissions, or multi-step navigation.",
+		"The returned cdpUrl can be used with Chrome DevTools Protocol for full browser control.",
+		"Use profile to persist browser state across sessions.",
+	],
+	parameters: Type.Object({
+		ttl: Type.Optional(
+			Type.Number({
+				description: "Total session lifetime in seconds. Default 600, range 30-3600.",
+			}),
+		),
+		activityTtl: Type.Optional(
+			Type.Number({
+				description: "Seconds of inactivity before session is destroyed. Default 300, range 10-3600.",
+			}),
+		),
+		profile: Type.Optional(
+			Type.Object(
+				{
+					name: Type.String({
+						description: "Name for the profile (1-128 chars). Sessions with the same name share storage.",
+					}),
+					saveChanges: Type.Optional(
+						Type.Boolean({
+							description:
+								"When true, browser state is saved back to the profile on close. Default true.",
+						}),
+					),
+				},
+				{
+					description:
+						"Enable persistent storage across sessions. Data saved in one session can be loaded in a later session using the same name.",
+				},
+			),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "interact", async () => {
+			const payload = await firecrawlRequest(
+				"POST",
+				"/interact",
+				cleanObject(params),
+				signal,
+			);
 			return jsonResult(payload);
 		});
 	},

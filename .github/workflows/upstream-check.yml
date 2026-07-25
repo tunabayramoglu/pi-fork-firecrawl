@@ -1,0 +1,120 @@
+name: Upstream Sync Check
+
+on:
+  schedule:
+    - cron: "0 8 * * *"  # Daily at 8am UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force full check even if no upstream changes"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check upstream changes
+        id: upstream
+        run: |
+          # Fetch latest upstream
+          git remote add upstream https://github.com/narumiruna/pi-extensions.git || true
+          git fetch upstream main --quiet
+
+          # Compare upstream firecrawl extension with our client.ts
+          UPSTREAM_HASH=$(git rev-parse upstream/main:extensions/pi-firecrawl/src/client.ts 2>/dev/null || echo "none")
+          LOCAL_HASH=$(git rev-parse HEAD:src/client.ts 2>/dev/null || echo "none")
+
+          echo "upstream_hash=$UPSTREAM_HASH" >> "$GITHUB_OUTPUT"
+          echo "local_hash=$LOCAL_HASH" >> "$GITHUB_OUTPUT"
+
+          if [ "$UPSTREAM_HASH" != "$LOCAL_HASH" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Upstream firecrawl client.ts has changed"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No upstream changes detected"
+          fi
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Verify tool definitions
+        run: |
+          node --input-type=module -e "
+            const { FIRECRAWL_TOOL_NAMES } = await import('./src/tools.ts');
+            const expected = [
+              'firecrawl_scrape', 'firecrawl_crawl', 'firecrawl_crawl_status',
+              'firecrawl_map', 'firecrawl_search', 'firecrawl_agent',
+              'firecrawl_parse', 'firecrawl_interact'
+            ];
+            const missing = expected.filter(n => !FIRECRAWL_TOOL_NAMES.includes(n));
+            const extra = FIRECRAWL_TOOL_NAMES.filter(n => !expected.includes(n));
+            if (missing.length) { console.error('Missing tools:', missing); process.exit(1); }
+            if (extra.length) { console.error('Unexpected tools:', extra); process.exit(1); }
+            console.log('All', FIRECRAWL_TOOL_NAMES.length, 'tools verified:', FIRECRAWL_TOOL_NAMES.join(', '));
+          "
+
+      - name: Verify multi-key client
+        run: |
+          node --input-type=module -e "
+            const mod = await import('./src/client.ts');
+            console.log('hasApiKey:', mod.hasApiKey());
+            console.log('configuredApiUrl:', mod.configuredApiUrl());
+            console.log('normalizeApiUrl:', mod.normalizeApiUrl('https://example.com/v1/'));
+          "
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Upstream check failed: ${new Date().toISOString().split('T')[0]}`;
+            const body = [
+              '## Upstream Sync Check Failed',
+              '',
+              `**Upstream hash:** \`${{ steps.upstream.outputs.upstream_hash }}\``,
+              `**Local hash:** \`${{ steps.upstream.outputs.local_hash }}\``,
+              `**Upstream changed:** ${{ steps.upstream.outputs.changed }}`,
+              '',
+              'The automated check detected that the upstream firecrawl extension has changed,',
+              'or our local modifications are no longer compatible.',
+              '',
+              '### Actions needed',
+              '1. Review upstream changes at https://github.com/narumiruna/pi-extensions/commits/main/extensions/pi-firecrawl',
+              '2. Update our fork if needed',
+              '3. Run `npx tsc --noEmit` locally to verify',
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['upstream-sync', 'automated'],
+            });
+
+      - name: Summary
+        run: |
+          echo "### Upstream Check Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Upstream changed:** ${{ steps.upstream.outputs.changed }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Upstream hash:** \`${{ steps.upstream.outputs.upstream_hash }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Typecheck:** passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Tool verification:** passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Client verification:** passed" >> "$GITHUB_STEP_SUMMARY"

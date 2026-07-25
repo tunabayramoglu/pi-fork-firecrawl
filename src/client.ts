@@ -299,13 +299,17 @@ export async function firecrawlRequest(
 	store.keys[apiKey].lastChecked = new Date().toISOString();
 	saveUsage(store);
 
+	const hasMultipart = body && typeof body === "object" && "_multipart" in body;
+	const formData = hasMultipart ? (body as Record<string, unknown>)._multipart : undefined;
+	const isFormData = formData instanceof FormData;
+
 	const response = await fetch(`${apiUrl}${path}`, {
 		method,
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
-			...(body === undefined ? {} : { "Content-Type": "application/json" }),
+			...(isFormData ? {} : body === undefined ? {} : { "Content-Type": "application/json" }),
 		},
-		body: body === undefined ? undefined : JSON.stringify(body),
+		body: isFormData ? formData : body === undefined ? undefined : JSON.stringify(body),
 		signal,
 	});
 	const responseText = await response.text();
@@ -319,9 +323,9 @@ export async function firecrawlRequest(
 				method,
 				headers: {
 					Authorization: `Bearer ${rotated.key}`,
-					...(body === undefined ? {} : { "Content-Type": "application/json" }),
+					...(isFormData ? {} : body === undefined ? {} : { "Content-Type": "application/json" }),
 				},
-				body: body === undefined ? undefined : JSON.stringify(body),
+				body: isFormData ? formData : body === undefined ? undefined : JSON.stringify(body),
 				signal,
 			});
 			const retryText = await retryResponse.text();

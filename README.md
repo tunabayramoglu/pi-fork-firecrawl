@@ -13,7 +13,7 @@ Fork of [`@narumitw/pi-firecrawl`](https://github.com/narumiruna/pi-extensions/t
 | Key rotation | None | Auto-rotate on 429, retry with next key |
 | Usage tracking | None | Local persistence across restarts |
 | Strategies | N/A | `quota-first`, `priority`, `round-robin` |
-| Tools | scrape, crawl, crawl_status, map, search | + **agent**, **parse**, **interact** |
+| Tools | scrape, crawl, crawl_status, map, search | + **parse**, **interact** |
 
 ## Install
 
@@ -44,7 +44,7 @@ Add a `keys` array to `~/.pi/agent/pi-firecrawl.json`:
   "tools": [
     "firecrawl_scrape", "firecrawl_crawl", "firecrawl_crawl_status",
     "firecrawl_map", "firecrawl_search",
-    "firecrawl_agent", "firecrawl_parse", "firecrawl_interact"
+    "firecrawl_parse", "firecrawl_interact"
   ],
   "keys": [
     {
@@ -94,15 +94,15 @@ export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
 
 ### Single page extraction
 
-| Scenario | scrape | agent | Winner | Savings |
-|---|---|---|---|---|
-| Simple text+images page | 1 credit | ~80 credits | scrape | 99% |
-| JS-rendered SPA | 1 credit (with actions) | ~80 credits | scrape | 99% |
-| Complex nested tables, need structured JSON | 5 credits (+4 JSON) | ~80 credits | scrape | 94% |
-| Multi-page extraction from messy site | N/A | ~80 credits/run | agent | only option |
-| Need data from 10+ pages with navigation | 10+ credits | ~80 credits total | agent | 20-50% |
+| Scenario | scrape credits | Adder | Total |
+|---|---|---|---|
+| Simple text+images page | 1 | -- | 1 credit |
+| JS-rendered SPA (with actions) | 1 | -- | 1 credit |
+| Complex nested tables + JSON extraction | 1 | +4 | 5 credits |
+| Enhanced proxy mode | 1 | +4 | 5 credits |
+| PDF page via scrape | 1 | -- | 1 credit/page |
 
-**Rule of thumb:** Use scrape unless you need the agent to navigate/click across multiple pages. Agent is worth it when a single scrape can't reach the data.
+**Rule of thumb:** scrape is almost always the cheapest option. Only reach for agent if you need multi-page navigation that scrape can't handle.
 
 ### Site-wide ingestion
 
@@ -155,7 +155,6 @@ export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
 ### Multi-key budget allocation
 
 Given 3 accounts: Free (1K/mo), Hobby (5K/mo), Standard (100K/mo).
-
 Typical monthly usage for a coding agent:
 
 | Tool | Count | Avg credits/op | Total | Recommended key |
@@ -163,22 +162,17 @@ Typical monthly usage for a coding agent:
 | scrape | 200 | 1 | 200 | Free |
 | crawl (20 pages avg) | 10 | 20 | 200 | Free |
 | search | 50 | 2 | 100 | Free |
-| map | 30 | 1 | 30 | Free |
 | parse | 20 | 5 | 100 | Hobby |
-| agent | 5 | 80 | 400 | Hobby |
 | interact | 10 | 6 | 60 | Hobby |
-| **Total** | | | **1,090** | |
-
-**Strategy:** Put lightweight tools (scrape, crawl, search, map) on the Free tier. Put heavier tools (agent, interact, parse) on Hobby. Keep Standard as emergency overflow.
+| **Total** | | | **690** | |
+**Strategy:** Put lightweight tools (scrape, crawl, search, map) on the Free tier. Put heavier tools (interact, parse) on Hobby. Keep Standard as emergency overflow.
 
 | Tool | Cost | Notes |
 |---|---|---|
 | scrape | 1 credit/page | +4 for JSON extraction, +4 for enhanced mode |
 | crawl | 1 credit/page | Same adders as scrape |
-| crawl_status | 0 credits | Check job status |
 | map | 1 credit/call | Per call |
 | search | 2 credits/10 results | Scraping results adds scrape costs |
-| agent | 5 free/day, then dynamic | Based on agent tokens consumed |
 | parse | 1 credit/page | Per PDF page; base64 upload |
 | interact | 2 credits/minute | Browser session time |
 
@@ -241,30 +235,6 @@ Search the web through Firecrawl and optionally scrape result pages.
 { "query": "firecrawl documentation", "limit": 5 }
 ```
 
-### firecrawl_agent -- 5 free/day, then dynamic
-
-Autonomous AI-powered web data extraction. Provide a prompt and optional URLs; the agent navigates, scrapes, and extracts structured data.
-
-**Best for:** Complex extraction tasks where a simple scrape isn't enough -- multi-page data collection, sites that require navigation/clicking, pulling structured data from messy pages, or when you need a specific JSON schema filled. The agent figures out how to get the data on its own.
-
-**Avoid when:** You just need raw page content (use scrape -- it's 50x cheaper), the page is simple and static, or you're on a tight credit budget (agent can consume hundreds of credits per run).
-
-```json
-{
-  "prompt": "Extract all product names, prices, and descriptions from this page",
-  "urls": ["https://example.com/products"],
-  "model": "spark-1-mini",
-  "maxCredits": 500
-}
-```
-
-Parameters:
-- `prompt` (required) -- What data to extract. Be specific.
-- `urls` -- URLs to constrain the agent to.
-- `schema` -- JSON schema for structured output.
-- `maxCredits` -- Credit budget (default 2500).
-- `strictConstrainToURLs` -- Only visit provided URLs.
-- `model` -- `spark-1-mini` (default, cheaper) or `spark-1-pro` (higher accuracy).
 ### firecrawl_parse -- 1 credit/page
 
 Upload a local file (PDF, DOCX, XLSX, HTML) and parse it into clean markdown or structured JSON.
@@ -333,7 +303,7 @@ A GitHub Actions workflow (`upstream-check.yml`) runs daily to verify:
 
 - Upstream `narumiruna/pi-extensions` hasn't broken our fork
 - TypeScript compiles cleanly
-- All 8 tool definitions are present and valid
+- All 7 tool definitions are present and valid
 - Multi-key client logic works
 
 On failure, it automatically creates a GitHub issue.
@@ -347,7 +317,7 @@ src/
   client.ts       # Multi-key manager, HTTP client, quota checking
   settings.ts     # Settings persistence and migration
   tool-selector.ts # Tool selection UI
-  tools.ts        # All 8 tool definitions
+  tools.ts        # All 7 tool definitions
 test/
   firecrawl.test.ts
   support.ts

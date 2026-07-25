@@ -8,7 +8,6 @@ export const FIRECRAWL_TOOL_NAMES = [
 	"firecrawl_crawl_status",
 	"firecrawl_map",
 	"firecrawl_search",
-	"firecrawl_agent",
 	"firecrawl_parse",
 	"firecrawl_interact",
 ] as const;
@@ -190,64 +189,8 @@ export const searchTool = defineTool({
 
 // ─── New Tools ───────────────────────────────────────────────────────────────
 
-export const agentTool = defineTool({
-	name: FIRECRAWL_TOOL_NAMES[5],
-	label: "Firecrawl: Agent",
-	description:
-		"Autonomous AI-powered web data extraction. Provide a prompt and optional URLs; the agent navigates, scrapes, and extracts structured data.",
-	promptSnippet: "Autonomous Firecrawl agent for agentic data extraction",
-	promptGuidelines: [
-		"Use firecrawl_agent when you need to extract structured data from multiple pages or complex sites where a simple scrape is insufficient.",
-		"The agent can navigate, click, scroll, and extract data autonomously based on your prompt.",
-		"Provide a JSON schema in the 'schema' field to get structured output matching your desired format.",
-	],
-	parameters: Type.Object({
-		prompt: Type.String({
-			description:
-				"The prompt describing what data to extract. Be specific about what you want.",
-			maxLength: 10000,
-		}),
-		urls: Type.Optional(
-			Type.Array(Type.String(), {
-				description: "Optional list of URLs to constrain the agent to.",
-			}),
-		),
-		schema: Type.Optional(
-			Type.Any({
-				description:
-					"Optional JSON schema to structure the extracted data. The agent will return data matching this schema.",
-			}),
-		),
-		maxCredits: Type.Optional(
-			Type.Number({
-				description:
-					"Maximum credits to spend on this agent task. Defaults to 2500 if not set. Values above 2500 are always billed as paid requests.",
-			}),
-		),
-		strictConstrainToURLs: Type.Optional(
-			Type.Boolean({
-				description:
-					"If true, agent will only visit URLs provided in the urls array. Default false.",
-			}),
-		),
-		model: Type.Optional(
-			Type.String({
-				description:
-					"The model to use for the agent task. spark-1-mini (default) is 60% cheaper; spark-1-pro offers higher accuracy for complex tasks.",
-				enum: ["spark-1-mini", "spark-1-pro"],
-			}),
-		),
-	}),
-	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-		return withStatus(ctx, "agent", async () => {
-			const payload = await firecrawlRequest("POST", "/agent", cleanObject(params), signal);
-			return jsonResult(payload);
-		});
-	},
-});
-
 export const parseTool = defineTool({
-	name: FIRECRAWL_TOOL_NAMES[6],
+	name: FIRECRAWL_TOOL_NAMES[5],
 	label: "Firecrawl: Parse",
 	description:
 		"Upload a local file (PDF, DOCX, XLSX, HTML) and parse it into clean markdown or structured JSON.",
@@ -316,7 +259,7 @@ export const parseTool = defineTool({
 });
 
 export const interactTool = defineTool({
-	name: FIRECRAWL_TOOL_NAMES[7],
+	name: FIRECRAWL_TOOL_NAMES[6],
 	label: "Firecrawl: Interact",
 	description:
 		"Create a Firecrawl browser session for interactive web tasks. Returns a CDP URL for browser control and live view URLs.",

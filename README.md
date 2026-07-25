@@ -90,6 +90,87 @@ export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
 `FIRECRAWL_BASE_URL` is also accepted.
 
 ## Tools
+## Cost Efficiency Guide
+
+### Single page extraction
+
+| Scenario | scrape | agent | Winner | Savings |
+|---|---|---|---|---|
+| Simple text+images page | 1 credit | ~80 credits | scrape | 99% |
+| JS-rendered SPA | 1 credit (with actions) | ~80 credits | scrape | 99% |
+| Complex nested tables, need structured JSON | 5 credits (+4 JSON) | ~80 credits | scrape | 94% |
+| Multi-page extraction from messy site | N/A | ~80 credits/run | agent | only option |
+| Need data from 10+ pages with navigation | 10+ credits | ~80 credits total | agent | 20-50% |
+
+**Rule of thumb:** Use scrape unless you need the agent to navigate/click across multiple pages. Agent is worth it when a single scrape can't reach the data.
+
+### Site-wide ingestion
+
+| Scenario | crawl (all pages) | map + scrape (selective) | map only (discovery) | Winner |
+|---|---|---|---|---|
+| Small docs site, 50 pages | 50 credits | 51 credits (1+50) | 1 credit | crawl |
+| Large blog, 500 posts | 500 credits | 501 credits | 1 credit | crawl (if you need all) |
+| E-commerce, 2000 products | 2000 credits | 2001 credits | 1 credit | map (if you only need some) |
+| Selective: need 20 of 500 pages | 500 credits | 21 credits | 1 credit | map + scrape |
+| URL audit only, no content | 500 credits | N/A | 1 credit | map |
+
+**Rule of thumb:** Crawl when you need everything. Map+scrape when you need a subset. Map alone for URL discovery.
+
+### URL discovery
+
+| Scenario | search (topic) | map (domain) | Winner |
+|---|---|---|---|
+| Find competitor blog posts about "AI tools" | 2 credits/10 results | N/A (single domain) | search |
+| Discover all API docs on a domain | N/A | 1 credit | map |
+| Find product reviews across the web | 2 credits/10 results | N/A | search |
+| Map site structure before crawling | N/A | 1 credit | map |
+| Find relevant pages + scrape them | 2 credits/10 + scrape | 1 credit + scrape | depends on scope |
+
+**Rule of thumb:** Search across the web, map within a single domain.
+
+### Interactive vs static
+
+| Scenario | interact (2 cr/min) | scrape with actions (1 cr) | Winner | Savings |
+|---|---|---|---|---|
+| Simple form fill + extract | 6 credits (3 min) | 1 credit | scrape | 83% |
+| Login + dashboard data | 10 credits (5 min) | N/A | interact | only option |
+| JS SPA that needs scrolling | 4 credits (2 min) | 1 credit | scrape | 75% |
+| Multi-step checkout flow | 12 credits (6 min) | N/A | interact | only option |
+| CAPTCHA-protected page | N/A | N/A | neither | blocked |
+
+**Rule of thumb:** Try scrape with `actions` first. Only use interact when you need login or multi-step browser flow.
+
+### Document parsing
+
+| Scenario | parse (1 cr/page) | scrape (if public URL) | Winner |
+|---|---|---|---|
+| 10-page local PDF | 10 credits | N/A (local file) | parse |
+| 50-page contract PDF | 50 credits | N/A (local file) | parse |
+| Public PDF by URL | 1 credit/page | 1 credit/page | tie (scrape simpler) |
+| Excel spreadsheet, 5 sheets | ~5 credits | N/A | parse |
+| Word doc, 20 pages | ~20 credits | N/A | parse |
+
+**Rule of thumb:** Parse for local files. Scrape for public URLs (same cost, no base64 encoding needed).
+
+### Multi-key budget allocation
+
+Given 3 accounts: Free (1K/mo), Hobby (5K/mo), Standard (100K/mo).
+
+Typical monthly usage for a coding agent:
+
+| Tool | Count | Avg credits/op | Total | Recommended key |
+|---|---|---|---|---|
+| scrape | 200 | 1 | 200 | Free |
+| crawl (20 pages avg) | 10 | 20 | 200 | Free |
+| search | 50 | 2 | 100 | Free |
+| map | 30 | 1 | 30 | Free |
+| parse | 20 | 5 | 100 | Hobby |
+| agent | 5 | 80 | 400 | Hobby |
+| interact | 10 | 6 | 60 | Hobby |
+| **Total** | | | **1,090** | |
+
+**Strategy:** Put lightweight tools (scrape, crawl, search, map) on the Free tier. Put heavier tools (agent, interact, parse) on Hobby. Keep Standard as emergency overflow.
+
 | Tool | Cost | Notes |
 |---|---|---|
 | scrape | 1 credit/page | +4 for JSON extraction, +4 for enhanced mode |

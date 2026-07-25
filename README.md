@@ -90,8 +90,19 @@ export FIRECRAWL_API_URL=https://api.firecrawl.dev/v1
 `FIRECRAWL_BASE_URL` is also accepted.
 
 ## Tools
+| Tool | Cost | Notes |
+|---|---|---|
+| scrape | 1 credit/page | +4 for JSON extraction, +4 for enhanced mode |
+| crawl | 1 credit/page | Same adders as scrape |
+| crawl_status | 0 credits | Check job status |
+| map | 1 credit/call | Per call |
+| search | 2 credits/10 results | Scraping results adds scrape costs |
+| agent | 5 free/day, then dynamic | Based on agent tokens consumed |
+| parse | 1 credit/page | Per PDF page; base64 upload |
+| interact | 2 credits/minute | Browser session time |
 
-### firecrawl_scrape
+
+### firecrawl_scrape -- 1 credit/page
 
 Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
 
@@ -99,7 +110,7 @@ Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
 { "url": "https://example.com", "formats": ["markdown"] }
 ```
 
-### firecrawl_crawl
+### firecrawl_crawl -- 1 credit/page
 
 Start a site crawl job and return the Firecrawl job id.
 
@@ -107,7 +118,7 @@ Start a site crawl job and return the Firecrawl job id.
 { "url": "https://example.com", "limit": 10, "scrapeOptions": { "formats": ["markdown"] } }
 ```
 
-### firecrawl_crawl_status
+### firecrawl_crawl_status -- 0 credits
 
 Check a crawl job status and retrieve completed crawl data.
 
@@ -115,7 +126,7 @@ Check a crawl job status and retrieve completed crawl data.
 { "id": "crawl-job-id" }
 ```
 
-### firecrawl_map
+### firecrawl_map -- 1 credit/call
 
 Discover URLs for a site.
 
@@ -123,7 +134,7 @@ Discover URLs for a site.
 { "url": "https://example.com", "limit": 20 }
 ```
 
-### firecrawl_search
+### firecrawl_search -- 2 credits/10 results
 
 Search the web through Firecrawl and optionally scrape result pages.
 
@@ -131,7 +142,7 @@ Search the web through Firecrawl and optionally scrape result pages.
 { "query": "firecrawl documentation", "limit": 5 }
 ```
 
-### firecrawl_agent
+### firecrawl_agent -- 5 free/day, then dynamic
 
 Autonomous AI-powered web data extraction. Provide a prompt and optional URLs; the agent navigates, scrapes, and extracts structured data.
 
@@ -152,7 +163,7 @@ Parameters:
 - `strictConstrainToURLs` -- Only visit provided URLs.
 - `model` -- `spark-1-mini` (default, cheaper) or `spark-1-pro` (higher accuracy).
 
-### firecrawl_parse
+### firecrawl_parse -- 1 credit/page
 
 Upload a local file (PDF, DOCX, XLSX, HTML) and parse it into clean markdown or structured JSON.
 
@@ -172,7 +183,7 @@ Parameters:
 - `onlyMainContent` -- Exclude headers/navs/footers.
 - `parsers` -- Parser config (e.g. PDF mode: fast/auto/ocr).
 
-### firecrawl_interact
+### firecrawl_interact -- 2 credits/minute
 
 Create a Firecrawl browser session for interactive web tasks. Returns a CDP URL for browser control and live view URLs.
 

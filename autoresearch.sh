@@ -1,15 +1,11 @@
 #!/bin/bash
 # Autoresearch harness: Firecrawl Credit Efficiency
-# Runs the benchmark and emits METRIC line for the optimization loop
+# Runs the dynamic benchmark and emits METRIC lines
 
 set -e
-
 cd "$(dirname "$0")"
 
-# Run benchmark
-CREDITS=$(bash scripts/bench-credits.sh)
-
-# Emit metric
-echo "METRIC credits_per_extraction=$CREDITS"
+# Run dynamic benchmark (outputs METRIC lines)
+cmd.exe /c "node scripts/bench-credits.js"
 
 exit 0

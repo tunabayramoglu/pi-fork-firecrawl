@@ -28,7 +28,15 @@ USAGE_FILE = CACHE_DIR / "usage.json"
 CONFIG_FILE = CACHE_DIR / "config.json"
 
 DEFAULT_CONFIG = {
+    # Model selection - supports any of these formats:
+    #   "BAAI/bge-m3"                    → HuggingFace model ID (sentence-transformers)
+    #   "sentence-transformers/all-MiniLM-L6-v2" → HuggingFace model ID
+    #   "/path/to/model"                 → Local model directory
+    #   "openvino:/path/to/model"        → OpenVINO IR model
+    #   "onnx:/path/to/model.onnx"       → ONNX model
+    #   "model2vec:minishlab/potion-base-32M" → Model2Vec static model
     "embedding_model": "BAAI/bge-m3",
+    "embedding_backend": "auto",  # auto | sentence-transformers | openvino | onnx | model2vec
     "embedding_dim": 1024,
     "similarity_threshold": 0.75,
     "max_entries": 10000,
@@ -36,36 +44,154 @@ DEFAULT_CONFIG = {
     "chunk_size": 512,
     "chunk_overlap": 50,
 }
-
-# ─── Embedding Model ─────────────────────────────────────────────────────────
-
+# ─── Model State ──────────────────────────────────────────────────────────────
 _model = None
 _model_name = None
-
 def get_model():
+    """Load embedding model based on config. Supports multiple backends."""
     global _model, _model_name
     if _model is not None:
         return _model
 
     config = load_config()
-    model_name = config.get("embedding_model", "BAAI/bge-m3")
+    model_spec = config.get("embedding_model", "BAAI/bge-m3")
+    backend = config.get("embedding_backend", "auto")
+
+    # Auto-detect backend from model spec
+    if backend == "auto":
+        if model_spec.startswith("openvino:"):
+            backend = "openvino"
+        elif model_spec.startswith("onnx:"):
+            backend = "onnx"
+        elif model_spec.startswith("model2vec:"):
+            backend = "model2vec"
+        elif "/" in model_spec and not model_spec.startswith("/"):
+            backend = "sentence-transformers"
+        else:
+            backend = "sentence-transformers"
+
+    print(f"Loading model: {model_spec} (backend: {backend})", file=sys.stderr)
 
     try:
-        from sentence_transformers import SentenceTransformer
-        print(f"Loading {model_name}...", file=sys.stderr)
-        _model = SentenceTransformer(model_name)
-        _model_name = model_name
-        print(f"Loaded: {_model.get_sentence_embedding_dimension()} dimensions", file=sys.stderr)
-        return _model
-    except ImportError:
-        print("sentence-transformers not available, using pseudo-embeddings", file=sys.stderr)
+        if backend == "sentence-transformers":
+            return _load_sentence_transformers(model_spec)
+        elif backend == "openvino":
+            return _load_openvino(model_spec.replace("openvino:", ""))
+        elif backend == "onnx":
+            return _load_onnx(model_spec.replace("onnx:", ""))
+        elif backend == "model2vec":
+            return _load_model2vec(model_spec.replace("model2vec:", ""))
+        else:
+            print(f"Unknown backend: {backend}", file=sys.stderr)
+            return None
+    except Exception as e:
+        print(f"Failed to load model: {e}", file=sys.stderr)
         return None
+
+def _load_sentence_transformers(model_name: str):
+    """Load via sentence-transformers."""
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer(model_name)
+    _model_name = model_name
+    dim = model.get_sentence_embedding_dimension()
+    print(f"Loaded {model_name}: {dim} dimensions", file=sys.stderr)
+    return model
+
+def _load_openvino(model_path: str):
+    """Load via OpenVINO (optimum-intel)."""
+    from optimum.intel import OVModelForFeatureExtraction
+    from transformers import AutoTokenizer
+    model = OVModelForFeatureExtraction.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    _model_name = f"openvino:{model_path}"
+    # Wrap in a simple class for consistent interface
+    return _OpenVINOModel(model, tokenizer)
+
+def _load_onnx(model_path: str):
+    """Load via ONNX Runtime."""
+    try:
+        from optimum.onnxruntime import ORTModelForFeatureExtraction
+        from transformers import AutoTokenizer
+        model = ORTModelForFeatureExtraction.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        _model_name = f"onnx:{model_path}"
+        return _ONNXModel(model, tokenizer)
+    except ImportError:
+        print("onnxruntime not available", file=sys.stderr)
+        return None
+
+def _load_model2vec(model_name: str):
+    """Load via Model2Vec (static embeddings)."""
+    from model2vec import StaticModel
+    model = StaticModel.from_pretrained(model_name)
+    _model_name = f"model2vec:{model_name}"
+    return _Model2VecWrapper(model)
+
+class _OpenVINOModel:
+    """Wrapper for OpenVINO model to match sentence-transformers interface."""
+    def __init__(self, model, tokenizer):
+        self.model = model
+        self.tokenizer = tokenizer
+        self._dim = 1024  # BGE-M3 default
+
+    def get_sentence_embedding_dimension(self):
+        return self._dim
+
+    def encode(self, sentences, normalize_embeddings=True, **kwargs):
+        import torch
+        if isinstance(sentences, str):
+            sentences = [sentences]
+        inputs = self.tokenizer(sentences, padding=True, truncation=True, return_tensors="pt")
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        embeddings = outputs.last_hidden_state[:, 0]  # CLS pooling
+        if normalize_embeddings:
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+        return embeddings.numpy()
+
+class _ONNXModel:
+    """Wrapper for ONNX model to match sentence-transformers interface."""
+    def __init__(self, model, tokenizer):
+        self.model = model
+        self.tokenizer = tokenizer
+        self._dim = 1024
+
+    def get_sentence_embedding_dimension(self):
+        return self._dim
+
+    def encode(self, sentences, normalize_embeddings=True, **kwargs):
+        import torch
+        if isinstance(sentences, str):
+            sentences = [sentences]
+        inputs = self.tokenizer(sentences, padding=True, truncation=True, return_tensors="pt")
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        embeddings = outputs.last_hidden_state[:, 0]
+        if normalize_embeddings:
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+        return embeddings.numpy()
+
+class _Model2VecWrapper:
+    """Wrapper for Model2Vec to match sentence-transformers interface."""
+    def __init__(self, model):
+        self.model = model
+        self._dim = model.get_sentence_embedding_dimension()
+
+    def get_sentence_embedding_dimension(self):
+        return self._dim
+
+    def encode(self, sentences, normalize_embeddings=True, **kwargs):
+        return self.model.encode(sentences)
 
 def embed_text(text: str) -> list[float]:
     """Generate embedding for text."""
     model = get_model()
     if model is not None:
         embedding = model.encode(text, normalize_embeddings=True)
+        import numpy as np
+        embedding = np.array(embedding)
+        if embedding.ndim > 1:
+            embedding = embedding[0]
         return embedding.tolist()
     else:
         return _pseudo_embedding(text)

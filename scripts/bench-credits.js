@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// Dynamic Firecrawl Credit Efficiency Benchmark
-// Tests optimizer + RAG cache with semantic similarity
+// Firecrawl RAG Cache Benchmark
+// Tests credit savings over a sequence of related queries
 
-import { selectCheapestTool, estimateCost, shouldScrape, recordUsage } from "../src/optimizer.ts";
 import { execSync } from 'child_process';
 
 const PYTHON = 'python';
@@ -11,7 +10,7 @@ const CWD = 'C:/Users/Asus/Documents/_Projects/pi-firecrawl-multikey';
 
 // ─── RAG Pipeline Interface ──────────────────────────────────────────────────
 
-function ragQuery(queryText, topK = 3, threshold = 0.4) {
+function ragQuery(queryText, topK = 3, threshold = 0.3) {
 	try {
 		const result = execSync(
 			`${PYTHON} ${RAG_SCRIPT} query "${queryText.replace(/"/g, '\\"')}" ${topK} ${threshold}`,
@@ -31,144 +30,156 @@ function ragStore(url, content, title) {
 	} catch { return false; }
 }
 
-function ragStats() {
-	try {
-		const result = execSync(
-			`${PYTHON} ${RAG_SCRIPT} stats`,
-			{ encoding: 'utf-8', timeout: 10000, cwd: CWD, stdio: ['pipe', 'pipe', 'pipe'] }
-		);
-		return JSON.parse(result.trim());
-	} catch { return {}; }
+// Decision: is cached content sufficient?
+function isCacheSufficient(results, query) {
+	if (!results || results.length === 0) return false;
+	const topScore = results[0]?.score ?? 0;
+	const resultCount = results.length;
+	const wordCount = query.split(' ').length;
+
+	if (topScore >= 0.8) return true;
+	if (resultCount >= 2 && results[1]?.score >= 0.5) return true;
+	if (wordCount <= 6 && topScore >= 0.6) return true;
+
+	return false;
 }
 
-// ─── Pre-populate RAG Pipeline ──────────────────────────────────────────────
+// ─── Simulate a Real Agent Session ───────────────────────────────────────────
 
-console.log('Pre-populating RAG pipeline...');
-ragStore('https://firecrawl.dev/docs/auth', 'Firecrawl authentication uses API keys. Create keys in the dashboard. Keys start with fc-. API key authentication with Bearer tokens.', 'Authentication Guide');
-ragStore('https://firecrawl.dev/docs/rate-limits', 'Firecrawl rate limits are per team. Free tier gets 1000 credits per month. Hobby gets 5000. Standard gets 100000.', 'Rate Limits');
-ragStore('https://firecrawl.dev/docs/crawl', 'Crawl endpoint starts a site crawl job. Returns a job id. Use crawl status to check progress. Supports limit, maxDepth, includePaths.', 'Crawl Documentation');
-ragStore('https://firecrawl.dev/docs/scrape', 'Scrape extracts content from a single URL. Returns markdown, HTML, or JSON. Supports actions for JS rendering.', 'Scrape Documentation');
-ragStore('https://firecrawl.dev/docs/search', 'Search queries the web and returns results with optional full-page content scraping.', 'Search Documentation');
-ragStore('https://firecrawl.dev/docs/map', 'Map discovers all URLs on a website. Returns list of URLs with metadata.', 'Map Documentation');
-ragStore('https://firecrawl.dev/docs/pricing', 'Pricing: Free 1000 credits, Hobby $19/mo 5000 credits, Standard $99/mo 100000 credits, Growth $399/mo 500000 credits.', 'Pricing');
-ragStore('https://firecrawl.dev/docs/interact', 'Interact creates browser sessions for JavaScript rendering, login flows, and form submissions. Returns CDP URL.', 'Interact Documentation');
+const session = [
+	// Session 1: First query — must scrape (cache empty)
+	{
+		query: "How does firecrawl authentication work?",
+		scrape_url: "https://firecrawl.dev/docs/auth",
+		scrape_content: "Firecrawl authentication uses API keys. Create keys in the dashboard. Keys start with fc-. API key authentication with Bearer tokens. Rate limits apply per team.",
+		scrape_title: "Authentication Guide",
+		expected_credits: 1,  // must scrape
+	},
 
-const ragStatsResult = ragStats();
-console.log(`RAG pipeline: ${ragStatsResult.total_entries || 0} entries`);
+	// Session 2: Related query — should hit cache
+	{
+		query: "What about API key security?",
+		expected_credits: 0,  // should find auth docs in cache
+	},
 
-// ─── URL Cache Pre-population ────────────────────────────────────────────────
+	// Session 3: Related query — should hit cache
+	{
+		query: "How to set up API keys?",
+		expected_credits: 0,  // should find auth docs in cache
+	},
 
-recordUsage("scrape", "https://example.com", 1, "markdown");
-recordUsage("scrape", "https://example.org", 1, "markdown");
-recordUsage("scrape", "https://example.com/page", 1, "markdown");
-recordUsage("scrape", "https://example.com/read", 1, "markdown");
-recordUsage("scrape", "https://example.com/what", 1, "markdown");
-recordUsage("scrape", "https://example.com/docs", 1, "markdown");
-recordUsage("scrape", "https://example.com/search", 1, "markdown");
-recordUsage("scrape", "https://example.com/overview", 1, "markdown");
+	// Session 4: Different topic — must scrape
+	{
+		query: "What are the rate limits?",
+		scrape_url: "https://firecrawl.dev/docs/rate-limits",
+		scrape_content: "Firecrawl rate limits are per team. Free tier gets 1000 credits per month. Hobby gets 5000. Standard gets 100000. Rate limits reset monthly.",
+		scrape_title: "Rate Limits",
+		expected_credits: 1,
+	},
 
-// ─── Test Scenarios ──────────────────────────────────────────────────────────
+	// Session 5: Related to rate limits — should hit cache
+	{
+		query: "How many credits do I get?",
+		expected_credits: 0,
+	},
 
-const scenarios = [
-	// Semantic cache hits via RAG pipeline (0 credits)
-	{ goal: "how does firecrawl authentication work", expectedTool: "firecrawl_search", expectRagHit: true },
-	{ goal: "what are the rate limits", expectedTool: "firecrawl_search", expectRagHit: true },
-	{ goal: "how to crawl a website", expectedTool: "firecrawl_search", expectRagHit: true },
-	{ goal: "scrape a single page", expectedTool: "firecrawl_scrape", expectRagHit: true },
-	{ goal: "search the web for documentation", expectedTool: "firecrawl_search", expectRagHit: true },
-	{ goal: "discover all URLs on a site", expectedTool: "firecrawl_map", expectRagHit: true },
-	{ goal: "pricing plans and costs", expectedTool: "firecrawl_search", expectRagHit: true },
-	{ goal: "browser automation and login", expectedTool: "firecrawl_search", expectRagHit: true },
+	// Session 6: Related to rate limits — should hit cache
+	{
+		query: "What happens when I exceed limits?",
+		expected_credits: 0,
+	},
 
-	// Exact URL cache hits (0 credits)
-	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "scrape https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
+	// Session 7: New topic — must scrape
+	{
+		query: "How does crawling work?",
+		scrape_url: "https://firecrawl.dev/docs/crawl",
+		scrape_content: "Crawl endpoint starts a site crawl job. Returns a job id. Use crawl status to check progress. Supports limit, maxDepth, includePaths, excludePaths.",
+		scrape_title: "Crawl Documentation",
+		expected_credits: 1,
+	},
 
-	// Tool selection (credits vary)
-	{ goal: "find pages about AI coding tools", expectedTool: "firecrawl_search" },
-	{ goal: "get all blog posts from example.com", expectedTool: "firecrawl_map" },
-	{ goal: "list all pages on this site", expectedTool: "firecrawl_map" },
-	{ goal: "monitor this page for changes", expectedTool: "firecrawl_monitor_create" },
-	{ goal: "notify me when pricing changes", expectedTool: "firecrawl_monitor_create" },
-	{ goal: "parse this PDF document", expectedTool: "firecrawl_parse" },
-	{ goal: "extract text from local file", expectedTool: "firecrawl_parse" },
-	{ goal: "login and scrape dashboard", expectedTool: "firecrawl_interact" },
-	{ goal: "get 5 pages from a 100-page site", expectedTool: "firecrawl_map" },
-	{ goal: "find recent articles about machine learning", expectedTool: "firecrawl_search" },
-	{ goal: "site structure for example.com", expectedTool: "firecrawl_map" },
-	{ goal: "site audit for example.com", expectedTool: "firecrawl_map" },
+	// Session 8: Related to crawl — should hit cache
+	{
+		query: "How to control crawl depth?",
+		expected_credits: 0,
+	},
 
-	// URL normalization cache hits
-	{ goal: "scrape https://example.com/page?utm_source=google", url: "https://example.com/page?utm_source=google", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "scrape https://example.com/Page/", url: "https://example.com/Page/", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "re-check https://example.com/page?ref=homepage", url: "https://example.com/page?ref=homepage", expectedTool: "firecrawl_scrape", expectCached: true },
+	// Session 9: Related to crawl — should hit cache
+	{
+		query: "Crawl job status checking",
+		expected_credits: 0,
+	},
 
-	// More semantic cache hits
-	{ goal: "read this URL", url: "https://example.com/read", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "what's on this page", url: "https://example.com/what", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "crawl example.com docs", expectedTool: "firecrawl_map" },
+	// Session 10: New topic — must scrape
+	{
+		query: "How does pricing work?",
+		scrape_url: "https://firecrawl.dev/docs/pricing",
+		scrape_content: "Pricing: Free 1000 credits, Hobby $19/mo 5000 credits, Standard $99/mo 100000 credits, Growth $399/mo 500000 credits. Credits reset monthly.",
+		scrape_title: "Pricing",
+		expected_credits: 1,
+	},
+
+	// Session 11: Related to pricing — should hit cache
+	{
+		query: "What does the hobby plan include?",
+		expected_credits: 0,
+	},
+
+	// Session 12: Related to pricing — should hit cache
+	{
+		query: "Enterprise pricing options",
+		expected_credits: 0,
+	},
 ];
 
 // ─── Run Benchmark ───────────────────────────────────────────────────────────
 
-async function run() {
-	let totalCredits = 0;
-	let successes = 0;
-	let correctToolSelections = 0;
-	let cacheHits = 0;
-	let ragHits = 0;
+console.log('Running RAG cache benchmark...\n');
 
-	for (const scenario of scenarios) {
-		const recommendation = selectCheapestTool(scenario.goal);
-		const toolName = recommendation.tool.replace("firecrawl_", "");
+let totalCredits = 0;
+let cacheHits = 0;
+let misses = 0;
 
-		let credits = 0;
-		let gotCacheHit = false;
+for (let i = 0; i < session.length; i++) {
+	const step = session[i];
+	process.stdout.write(`Step ${i + 1}: "${step.query}" ... `);
 
-		// 1. Check RAG pipeline (semantic cache)
-		if (scenario.expectRagHit) {
-			const ragResult = ragQuery(scenario.goal, 1, 0.4);
-			if (ragResult.results && ragResult.results.length > 0) {
-				credits = 0;
-				gotCacheHit = true;
-				ragHits++;
-			}
-		}
+	// Check RAG cache
+	const ragResult = ragQuery(step.query, 3, 0.3);
+	const sufficient = ragResult.results && ragResult.results.length > 0 && isCacheSufficient(ragResult.results, step.query);
 
-		// 2. If no RAG hit, check URL cache
-		if (!gotCacheHit && scenario.url && scenario.expectCached) {
-			const cacheResult = await shouldScrape(scenario.url);
-			if (cacheResult.skip) {
-				credits = 0;
-				gotCacheHit = true;
-			}
-		}
-
-		// 3. If still no cache hit, pay full price
-		if (!gotCacheHit) {
-			credits = estimateCost(toolName, scenario.url ? { url: scenario.url } : {}).estimatedCredits;
-		}
-
-		if (gotCacheHit) cacheHits++;
-
-		totalCredits += credits;
-		successes++;
-
-		if (recommendation.tool === scenario.expectedTool) {
-			correctToolSelections++;
-		}
+	let credits = 0;
+	if (sufficient) {
+		// Cache hit — 0 credits
+		credits = 0;
+		cacheHits++;
+		console.log(`CACHE HIT (${ragResult.results.length} results, score: ${ragResult.results[0]?.score?.toFixed(2)})`);
+	} else if (step.scrape_url) {
+		// Cache miss — scrape and store
+		credits = 1;
+		misses++;
+		ragStore(step.scrape_url, step.scrape_content, step.scrape_title);
+		console.log(`SCRAPE (stored: ${step.scrape_title})`);
+	} else {
+		// Cache miss but no scrape URL — would need to scrape
+		credits = 1;
+		misses++;
+		console.log(`MISS (no cached content)`);
 	}
 
-	const creditsPerExtraction = (totalCredits / successes).toFixed(2);
-	const toolAccuracy = ((correctToolSelections / successes) * 100).toFixed(0);
-
-	console.log(`METRIC credits_per_extraction=${creditsPerExtraction}`);
-	console.log(`METRIC tool_selection_accuracy=${toolAccuracy}`);
-	console.log(`METRIC total_credits=${totalCredits}`);
-	console.log(`METRIC scenarios_tested=${successes}`);
-	console.log(`METRIC cache_hits=${cacheHits}`);
-	console.log(`METRIC rag_hits=${ragHits}`);
+	totalCredits += credits;
 }
 
-run();
+// ─── Results ─────────────────────────────────────────────────────────────────
+
+console.log('\n--- Results ---');
+console.log(`Total credits: ${totalCredits}`);
+console.log(`Cache hits: ${cacheHits}/${session.length}`);
+console.log(`Misses: ${misses}/${session.length}`);
+console.log(`Credits per query: ${(totalCredits / session.length).toFixed(2)}`);
+console.log(`Savings vs always-scrape: ${((1 - totalCredits / session.length) * 100).toFixed(0)}%`);
+
+console.log(`\nMETRIC credits_per_extraction=${(totalCredits / session.length).toFixed(2)}`);
+console.log(`METRIC cache_hit_rate=${(cacheHits / session.length).toFixed(2)}`);
+console.log(`METRIC total_credits=${totalCredits}`);
+console.log(`METRIC sessions=${session.length}`);

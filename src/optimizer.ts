@@ -96,11 +96,11 @@ function normalizeUrl(url: string): string {
 
 // ─── URL Deduplication ───────────────────────────────────────────────────────
 
-export async function shouldScrape(url: string, format = "markdown", title?: string): Promise<{ skip: boolean; reason: string }> {
+export async function shouldScrape(url: string, format = "markdown", title?: string): Promise<{ skip: boolean; reason: string; content?: string }> {
 	const store = loadCache();
 	const normalized = normalizeUrl(url);
 
-	// 1. Check exact match
+	// 1. Check exact URL match
 	const entry = store.scraped[url] ?? store.scraped[normalized];
 	if (entry) {
 		const age = Date.now() - new Date(entry.timestamp).getTime();
@@ -108,32 +108,49 @@ export async function shouldScrape(url: string, format = "markdown", title?: str
 			return { skip: false, reason: "Cache expired" };
 		}
 		if (entry.format !== format) {
-			return { skip: false, reason: `Different format requested (cached: ${entry.format}, requested: ${format})` };
+			return { skip: false, reason: `Different format (cached: ${entry.format}, requested: ${format})` };
 		}
-		return { skip: true, reason: `Already scraped ${entry.tool} at ${entry.timestamp} (${entry.credits} credits saved)` };
+		return { skip: true, reason: `Exact URL match (${entry.credits} credits saved)` };
 	}
 
-	// 2. Semantic similarity check (RAG cache via Python service)
+	// 2. Semantic search via RAG pipeline (top-3 results)
 	try {
-		const { search: ragSearch } = await import("./rag-client.js");
+		const { query: ragQuery } = await import("./rag-pipeline-client.js");
 		const queryText = preprocessText(url, title);
-		const results = ragSearch(queryText, 1, 0.85);
+		const ragResult = ragQuery(queryText, 3, 0.3);
 
-		if (results.length > 0 && results[0].score > 0.85) {
-			const matched = results[0];
-			return {
-				skip: true,
-				reason: `Semantic match: ${matched.url} (similarity: ${matched.score.toFixed(2)}) — ${matched.metadata.credits ?? 0} credits saved`,
-			};
+		if (ragResult.results && ragResult.results.length > 0) {
+			const sufficient = isCacheSufficient(ragResult.results, queryText);
+			if (sufficient) {
+				const topResult = ragResult.results[0];
+				return {
+					skip: true,
+					reason: `RAG cache hit: ${topResult.url} (score: ${topResult.score.toFixed(2)})`,
+					content: ragResult.results.map(r => `[${r.title}] ${r.summary}`).join("\n\n"),
+				};
+			}
 		}
 	} catch {
-		// RAG service not available — fall through to URL-only cache
+		// RAG service not available
 	}
 
-	return { skip: false, reason: "URL not cached" };
+	return { skip: false, reason: "No cached content found" };
 }
 
-export async function recordUsage(tool: string, url: string, credits: number, format = "markdown", title?: string): Promise<void> {
+function isCacheSufficient(results: any[], query: string): boolean {
+	if (!results || results.length === 0) return false;
+	const topScore = results[0]?.score ?? 0;
+	const resultCount = results.length;
+	const wordCount = query.split(' ').length;
+
+	if (topScore >= 0.8) return true;
+	if (resultCount >= 2 && results[1]?.score >= 0.5) return true;
+	if (wordCount <= 6 && topScore >= 0.6) return true;
+
+	return false;
+}
+
+export async function recordUsage(tool: string, url: string, credits: number, format = "markdown", title?: string, content?: string): Promise<void> {
 	const store = loadCache();
 	const normalized = normalizeUrl(url);
 	const entry = { url, tool, format, timestamp: new Date().toISOString(), credits };
@@ -144,13 +161,14 @@ export async function recordUsage(tool: string, url: string, credits: number, fo
 	store.totalCreditsUsed += credits;
 	saveCache(store);
 
-	// Store embedding for semantic similarity search (via Python RAG service)
-	try {
-		const { insert: ragInsert } = await import("./rag-client.js");
-		const text = preprocessText(url, title);
-		ragInsert(url, text, { url, tool, credits, format, title });
-	} catch {
-		// RAG service not available — skip
+	// Store in RAG pipeline for semantic search
+	if (content) {
+		try {
+			const { store: ragStore } = await import("./rag-pipeline-client.js");
+			ragStore(url, content, title ?? url);
+		} catch {
+			// RAG service not available
+		}
 	}
 }
 

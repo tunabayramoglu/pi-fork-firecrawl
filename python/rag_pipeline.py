@@ -363,7 +363,7 @@ def query_cache(query: str, top_k: int = 5, threshold: float = 0.75):
 
     # Get all entries
     cursor = db.execute("""
-        SELECT id, url, title, summary, embedding, domain, access_count
+        SELECT id, url, title, summary, content, embedding, domain, access_count
         FROM cache_entries
         ORDER BY updated_at DESC
     """)
@@ -375,7 +375,7 @@ def query_cache(query: str, top_k: int = 5, threshold: float = 0.75):
     # Calculate similarities
     results = []
     for entry in entries:
-        entry_id, url, title, summary, embedding_bytes, domain, access_count = entry
+        entry_id, url, title, summary, content, embedding_bytes, domain, access_count = entry
         if embedding_bytes:
             entry_embedding = np.frombuffer(embedding_bytes, dtype=np.float32).tolist()
             score = cosine_similarity(query_embedding, entry_embedding)
@@ -385,11 +385,11 @@ def query_cache(query: str, top_k: int = 5, threshold: float = 0.75):
                     "url": url,
                     "title": title,
                     "summary": summary,
+                    "content": content[:500] if content else "",
                     "score": score,
                     "domain": domain,
                     "access_count": access_count,
                 })
-
     # Sort by score descending
     results.sort(key=lambda x: x["score"], reverse=True)
 

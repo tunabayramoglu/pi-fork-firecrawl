@@ -264,12 +264,15 @@ export function selectCheapestTool(goal: string): {
 		};
 	}
 
-	// Needs interaction — use interact (last resort before default)
+	// Needs interaction — check if scrape with actions suffices
 	if (lower.includes("login") || lower.includes("sign in") || lower.includes("form") || lower.includes("click") || lower.includes("navigate")) {
+		const needsFullBrowser = lower.includes("login") || lower.includes("sign in") || lower.includes("multi-step");
 		return {
-			tool: "firecrawl_interact",
-			params: {},
-			reason: "Interaction needed (login, forms, clicks). Scrape with actions may also work.",
+			tool: needsFullBrowser ? "firecrawl_interact" : "firecrawl_scrape",
+			params: needsFullBrowser ? {} : { actions: [{ type: "wait", selector: "body" }] },
+			reason: needsFullBrowser
+				? "Full browser interaction needed (login, multi-step forms)."
+				: "Scrape with actions may work (1 credit vs 2 credits/min). Try this first.",
 		};
 	}
 

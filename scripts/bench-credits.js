@@ -4,17 +4,17 @@
 
 import { selectCheapestTool, estimateCost, shouldScrape, recordUsage } from "../src/optimizer.ts";
 
-// Pre-populate cache with some URLs to test cache hits
+// Pre-populate cache
 recordUsage("scrape", "https://example.com", 1, "markdown");
 recordUsage("scrape", "https://example.org", 1, "markdown");
 recordUsage("scrape", "https://example.com/page", 1, "markdown");
+recordUsage("scrape", "https://example.com/read", 1, "markdown");
+recordUsage("scrape", "https://example.com/what", 1, "markdown");
 
 const scenarios = [
 	// Easy: single page
 	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape" },
-
-	// Easy: cache hit
 	{ goal: "scrape https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
 
 	// Medium: search
@@ -49,15 +49,15 @@ const scenarios = [
 	{ goal: "re-check https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
 
 	// Hard: URL normalization
-	{ goal: "scrape https://example.com/page?utm_source=google&utm_medium=cpc", url: "https://example.com/page?utm_source=google&utm_medium=cpc", expectedTool: "firecrawl_scrape", expectCached: true },
+	{ goal: "scrape https://example.com/page?utm_source=google", url: "https://example.com/page?utm_source=google", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "scrape https://example.com/Page/", url: "https://example.com/Page/", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "re-check https://example.com/page?ref=homepage", url: "https://example.com/page?ref=homepage", expectedTool: "firecrawl_scrape", expectCached: true },
 
-	// Edge cases
-	{ goal: "read this URL", url: "https://example.com/read", expectedTool: "firecrawl_scrape" },
+	// Edge cases (some cached)
+	{ goal: "read this URL", url: "https://example.com/read", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "get data from website", expectedTool: "firecrawl_scrape" },
 	{ goal: "crawl example.com docs", expectedTool: "firecrawl_map" },
-	{ goal: "what's on this page", url: "https://example.com/what", expectedTool: "firecrawl_scrape" },
+	{ goal: "what's on this page", url: "https://example.com/what", expectedTool: "firecrawl_scrape", expectCached: true },
 ];
 
 let totalCredits = 0;

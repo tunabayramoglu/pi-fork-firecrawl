@@ -7,8 +7,7 @@ const DEFAULT_API_URL = "https://api.firecrawl.dev/v1";
 const V2_API_URL = "https://api.firecrawl.dev/v2";
 const STATUS_KEY = "firecrawl";
 const USAGE_FILE = "firecrawl-usage.json";
-const CONFIG_FILE = "pi-firecrawl.json";
-
+const CONFIG_FILE = "pi-firecrawl-keys.json";
 let apiUrl = normalizeApiUrl(process.env.FIRECRAWL_API_URL ?? process.env.FIRECRAWL_BASE_URL);
 
 // ─── Multi-Key Manager ───────────────────────────────────────────────────────
@@ -489,12 +488,20 @@ export async function addApiKey(apiKey: string): Promise<{
 
 	keys.push(newKey);
 	config.keys = keys;
-
 	// Save config
+	const configPath = join(agentDir(), CONFIG_FILE);
 	try {
-		writeFileSync(join(agentDir(), CONFIG_FILE), JSON.stringify(config, null, 2), "utf8");
-	} catch {
-		return { success: false, error: "Failed to write config file" };
+		const dir = agentDir();
+		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+		writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+		// Verify write succeeded
+		const verify = readFileSync(configPath, "utf8");
+		const parsed = JSON.parse(verify);
+		if (!parsed.keys || parsed.keys.length === 0) {
+			return { success: false, error: `Config write verification failed: keys array is empty after write` };
+		}
+	} catch (err) {
+		return { success: false, error: `Failed to write config: ${err instanceof Error ? err.message : String(err)}` };
 	}
 
 	// Update usage store

@@ -197,10 +197,60 @@ async function showMenu(pi: ExtensionAPI, ctx: CommandContext) {
 		case MENU_OPTIONS.enable:
 			await updateFirecrawlTools(pi, ctx, allFirecrawlTools(), "enabled all");
 			return;
-		case MENU_OPTIONS.disable:
-			await updateFirecrawlTools(pi, ctx, [], "disabled all");
-			return;
+	case MENU_OPTIONS.disable:
+		await updateFirecrawlTools(pi, ctx, [], "disabled all");
+		return;
+	case MENU_OPTIONS["add-api"]: {
+		const key = await ctx.ui.input("Firecrawl API Key", "fc-...");
+		if (!key) return;
+		ctx.ui.notify("Checking quota...", "info");
+		const result = await addApiKey(key);
+		if (result.success) {
+			ctx.ui.notify(
+				`API key added as "${result.name}"\n` +
+					`Remaining credits: ${result.remainingCredits ?? "unknown"}\n` +
+					`Plan credits: ${result.planCredits ?? "unknown"}`,
+				"info",
+			);
+		} else {
+			ctx.ui.notify(`Failed to add API key: ${result.error}`, "error");
+		}
+		return;
 	}
+	case MENU_OPTIONS["remove-api"]: {
+		const cfg = loadConfig();
+		const keys = cfg.keys ?? [];
+		if (keys.length === 0) {
+			ctx.ui.notify("No API keys configured.", "info");
+			return;
+		}
+		const names = keys.map((k) => `${k.name}: ${k.key.slice(0, 8)}...${k.key.slice(-4)}`);
+		const choice = await ctx.ui.select("Remove API key", names);
+		if (!choice) return;
+		const name = choice.split(":")[0].trim();
+		const idx = keys.findIndex((k) => k.name === name);
+		if (idx !== -1) {
+			keys.splice(idx, 1);
+			cfg.keys = keys;
+			saveConfig(cfg);
+			ctx.ui.notify(`Key "${name}" removed.`, "info");
+		}
+		return;
+	}
+	case MENU_OPTIONS["list-api"]: {
+		const cfg = loadConfig();
+		const keys = cfg.keys ?? [];
+		if (keys.length === 0) {
+			ctx.ui.notify("No API keys configured.\n\nUse: /firecrawl add-api <your-key>", "info");
+			return;
+		}
+		const lines = keys.map(
+			(k) => `${k.name}: ${k.key.slice(0, 8)}...${k.key.slice(-4)} (priority: ${k.priority}, quota: ${k.monthlyQuota ?? "auto"})`,
+		);
+		ctx.ui.notify(`Configured API keys (${keys.length}):\n${lines.join("\n")}`, "info");
+		return;
+	}
+}
 }
 
 export function parseCommand(args: string): CommandAction | "unknown" {

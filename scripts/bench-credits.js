@@ -35,6 +35,17 @@ const scenarios = [
 
 	// Hard: interact
 	{ goal: "login and scrape dashboard", expectedTool: "firecrawl_interact" },
+	// Hard: crawl alternatives (map+scrape is cheaper)
+	{ goal: "get 5 pages from a 100-page site", expectedTool: "firecrawl_map" },
+	{ goal: "extract content from specific pages only", expectedTool: "firecrawl_scrape" },
+
+	// Hard: search alternatives
+	{ goal: "find recent articles about machine learning", expectedTool: "firecrawl_search" },
+	{ goal: "discover documentation pages", expectedTool: "firecrawl_search" },
+
+	// Easy: cache hits
+	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
+	{ goal: "re-check https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
 ];
 
 let totalCredits = 0;

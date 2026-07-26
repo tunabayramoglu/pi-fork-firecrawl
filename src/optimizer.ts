@@ -207,7 +207,7 @@ export function selectCheapestTool(goal: string): {
 	const lower = goal.toLowerCase();
 
 	// Discovery needed — use map
-	if (lower.includes("all pages") || lower.includes("every page") || lower.includes("site map") || lower.includes("list all urls")) {
+	if (lower.includes("all pages") || lower.includes("every page") || lower.includes("site map") || lower.includes("list all urls") || lower.includes("from a") || lower.includes("from this site") || lower.includes("selective") || lower.includes("specific pages")) {
 		return {
 			tool: "firecrawl_map",
 			params: {},

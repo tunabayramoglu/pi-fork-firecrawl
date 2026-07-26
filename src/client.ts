@@ -176,9 +176,10 @@ async function checkQuota(apiKey: string): Promise<{
 		}
 
 		const data = (await response.json()) as Record<string, unknown>;
+		const inner = (data.data ?? data) as Record<string, unknown>;
 		return {
-			remainingCredits: data.remainingCredits as number | undefined,
-			planCredits: data.planCredits as number | undefined,
+			remainingCredits: inner.remainingCredits as number | undefined,
+			planCredits: inner.planCredits as number | undefined,
 		};
 	} catch (err) {
 		return { error: err instanceof Error ? err.message : String(err) };

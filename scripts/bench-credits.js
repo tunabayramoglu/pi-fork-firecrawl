@@ -58,6 +58,7 @@ const scenarios = [
 	{ goal: "get data from website", expectedTool: "firecrawl_scrape" },
 	{ goal: "crawl example.com docs", expectedTool: "firecrawl_map" },
 	{ goal: "what's on this page", url: "https://example.com/what", expectedTool: "firecrawl_scrape", expectCached: true },
+	{ goal: "site audit for example.com", expectedTool: "firecrawl_map" },
 ];
 
 let totalCredits = 0;

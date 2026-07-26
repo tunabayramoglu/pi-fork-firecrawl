@@ -27,22 +27,22 @@ Incoming scrape request
 - Higher quality, multilingual
 - OpenVINO IR format ready
 - Use if bge-small accuracy is insufficient
-
 ## Vector Store
 
-**Option 1: sqlite-vss (recommended)**
-- SQLite extension for vector search
-- Zero infrastructure — single file
-- Good for <100K entries
-- Already used in many local-first apps
+**sqlite-vss (recommended for Node.js)**
+- npm package: `sqlite-vss`
+- Works with `better-sqlite3`
+- Pre-compiled extension for each platform
+- Faiss-based vector search
+- Single file storage, zero infrastructure
 
-**Option 2: FAISS (if performance needed)**
-- Facebook's vector similarity search
-- Faster for >100K entries
-- More complex setup
+```typescript
+import Database from "better-sqlite3";
+import * as sqlite_vss from "sqlite-vss";
 
-## Integration Points
-
+const db = new Database(":memory:");
+sqlite_vss.load(db);
+```
 ### 1. optimizer.ts — Cache Lookup
 ```typescript
 // Before: exact URL match

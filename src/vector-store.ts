@@ -1,7 +1,7 @@
 /**
  * Vector Store for RAG Cache
- * In-memory vector store with cosine similarity search.
- * For production, replace with sqlite-vss or FAISS.
+ * Uses sqlite-vss for persistent vector search.
+ * Falls back to in-memory store if sqlite-vss is not available.
  */
 
 import { cosineSimilarity, type SimilarityResult } from "./embeddings.js";
@@ -13,19 +13,47 @@ interface VectorEntry {
 	timestamp: string;
 }
 
-// ─── In-Memory Store ─────────────────────────────────────────────────────────
+// ─── In-Memory Store (fallback) ──────────────────────────────────────────────
 
-const store = new Map<string, VectorEntry>();
-let storeInitialized = false;
+const memoryStore = new Map<string, VectorEntry>();
+let useMemoryStore = true;
+let db: any = null;
 
 /**
  * Initialize the vector store.
- * In production, this would load from sqlite-vss or FAISS.
+ * Tries sqlite-vss first, falls back to in-memory.
  */
 export function initStore(): void {
-	if (storeInitialized) return;
-	// Load from disk if available
-	storeInitialized = true;
+	if (!useMemoryStore) return;
+
+	try {
+		// Try to load sqlite-vss
+		const Database = require("better-sqlite3");
+		const sqlite_vss = require("sqlite-vss");
+
+		db = new Database(":memory:");
+		sqlite_vss.load(db);
+
+		// Create tables
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS cache (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				url TEXT NOT NULL UNIQUE,
+				embedding BLOB NOT NULL,
+				metadata TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE VIRTUAL TABLE IF NOT EXISTS vss_index USING vss0(
+				embedding(384)
+			);
+		`);
+
+		useMemoryStore = false;
+		console.log("Vector store: using sqlite-vss");
+	} catch {
+		console.log("Vector store: using in-memory (sqlite-vss not available)");
+		useMemoryStore = true;
+	}
 }
 
 /**
@@ -36,26 +64,72 @@ export function insert(
 	embedding: number[],
 	metadata: Record<string, unknown>,
 ): void {
-	store.set(id, {
-		id,
-		embedding,
-		metadata,
-		timestamp: new Date().toISOString(),
-	});
+	if (!useMemoryStore && db) {
+		const embeddingBlob = Buffer.from(new Float32Array(embedding).buffer);
+		const metadataJson = JSON.stringify(metadata);
+
+		try {
+			db.prepare(
+				"INSERT OR REPLACE INTO cache (url, embedding, metadata, created_at) VALUES (?, ?, ?, ?)",
+			).run(id, embeddingBlob, metadataJson, new Date().toISOString());
+
+			db.prepare("INSERT INTO vss_index (embedding) VALUES (?)").run(embeddingBlob);
+		} catch {
+			// Fall back to memory
+			memoryStore.set(id, {
+				id,
+				embedding,
+				metadata,
+				timestamp: new Date().toISOString(),
+			});
+		}
+	} else {
+		memoryStore.set(id, {
+			id,
+			embedding,
+			metadata,
+			timestamp: new Date().toISOString(),
+		});
+	}
 }
 
 /**
  * Search for similar vectors using cosine similarity.
- * Returns results sorted by similarity (highest first).
  */
 export function search(
 	queryEmbedding: number[],
 	topK = 5,
 	threshold = 0.85,
 ): SimilarityResult[] {
-	const results: SimilarityResult[] = [];
+	if (!useMemoryStore && db) {
+		try {
+			const queryBlob = Buffer.from(new Float32Array(queryEmbedding).buffer);
+			const results = db
+				.prepare(
+					`SELECT c.url, c.metadata, v.distance
+					FROM vss_index v
+					JOIN cache c ON c.id = v.rowid
+					WHERE vss_search(v.embedding, ?)
+					ORDER BY v.distance
+					LIMIT ?`,
+				)
+				.all(queryBlob, topK)
+				.filter((row: any) => row.distance <= 1 - threshold)
+				.map((row: any) => ({
+					id: row.url,
+					score: 1 - row.distance,
+					metadata: JSON.parse(row.metadata),
+				}));
 
-	for (const [id, entry] of store) {
+			return results;
+		} catch {
+			// Fall back to memory search
+		}
+	}
+
+	// In-memory search
+	const results: SimilarityResult[] = [];
+	for (const [id, entry] of memoryStore) {
 		const score = cosineSimilarity(queryEmbedding, entry.embedding);
 		if (score >= threshold) {
 			results.push({
@@ -66,9 +140,7 @@ export function search(
 		}
 	}
 
-	// Sort by score descending
 	results.sort((a, b) => b.score - a.score);
-
 	return results.slice(0, topK);
 }
 
@@ -76,49 +148,55 @@ export function search(
  * Get entry by ID.
  */
 export function get(id: string): VectorEntry | undefined {
-	return store.get(id);
+	if (!useMemoryStore && db) {
+		const row = db.prepare("SELECT * FROM cache WHERE url = ?").get(id);
+		if (row) {
+			return {
+				id: row.url,
+				embedding: Array.from(new Float32Array(row.embedding.buffer)),
+				metadata: JSON.parse(row.metadata),
+				timestamp: row.created_at,
+			};
+		}
+		return undefined;
+	}
+	return memoryStore.get(id);
 }
 
 /**
  * Delete entry by ID.
  */
 export function remove(id: string): boolean {
-	return store.delete(id);
+	if (!useMemoryStore && db) {
+		try {
+			db.prepare("DELETE FROM cache WHERE url = ?").run(id);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+	return memoryStore.delete(id);
 }
 
 /**
  * Get store size.
  */
 export function size(): number {
-	return store.size;
+	if (!useMemoryStore && db) {
+		return db.prepare("SELECT COUNT(*) as count FROM cache").get().count;
+	}
+	return memoryStore.size;
 }
 
 /**
  * Clear all entries.
  */
 export function clear(): void {
-	store.clear();
-}
-
-/**
- * Export store as JSON (for persistence).
- */
-export function exportStore(): string {
-	const entries = Array.from(store.values());
-	return JSON.stringify(entries, null, 2);
-}
-
-/**
- * Import store from JSON.
- */
-export function importStore(json: string): void {
-	try {
-		const entries = JSON.parse(json) as VectorEntry[];
-		for (const entry of entries) {
-			store.set(entry.id, entry);
-		}
-	} catch {
-		// ignore invalid JSON
+	if (!useMemoryStore && db) {
+		db.exec("DELETE FROM cache");
+		db.exec("DELETE FROM vss_index");
+	} else {
+		memoryStore.clear();
 	}
 }
 
@@ -126,5 +204,23 @@ export function importStore(json: string): void {
  * Get all entries (for debugging).
  */
 export function all(): VectorEntry[] {
-	return Array.from(store.values());
+	if (!useMemoryStore && db) {
+		return db
+			.prepare("SELECT * FROM cache")
+			.all()
+			.map((row: any) => ({
+				id: row.url,
+				embedding: Array.from(new Float32Array(row.embedding.buffer)),
+				metadata: JSON.parse(row.metadata),
+				timestamp: row.created_at,
+			}));
+	}
+	return Array.from(memoryStore.values());
+}
+
+/**
+ * Check if using sqlite-vss.
+ */
+export function isUsingSqliteVss(): boolean {
+	return !useMemoryStore;
 }

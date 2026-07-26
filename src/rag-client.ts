@@ -1,12 +1,12 @@
 /**
- * RAG Cache Client
- * Calls the Python RAG service for semantic similarity caching.
+ * RAG Pipeline Client
+ * Calls the Python RAG pipeline for semantic similarity search and caching.
  */
 
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 
-const PYTHON_SCRIPT = join(import.meta.dirname ?? ".", "..", "python", "rag_cache.py");
+const PYTHON_SCRIPT = join(import.meta.dirname ?? ".", "..", "python", "rag_pipeline.py");
 
 function runPython(command: string, ...args: string[]): unknown {
 	try {
@@ -17,13 +17,14 @@ function runPython(command: string, ...args: string[]): unknown {
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		return JSON.parse(output.trim());
-	} catch {
+	} catch (err) {
+		console.error("[rag-client] Python subprocess failed:", err instanceof Error ? err.message : err);
 		return null;
 	}
 }
 
 /**
- * Get embedding for text via Python service.
+ * Get embedding for text via RAG pipeline.
  */
 export function embed(text: string): number[] | null {
 	const result = runPython("embed", text) as { embedding?: number[] } | null;
@@ -31,21 +32,21 @@ export function embed(text: string): number[] | null {
 }
 
 /**
- * Search for similar entries via Python service.
+ * Search for similar entries via RAG pipeline.
  */
 export function search(
 	queryText: string,
 	topK = 5,
 	threshold = 0.85,
 ): { url: string; score: number; metadata: Record<string, unknown> }[] {
-	const result = runPython("search", queryText, String(topK)) as {
+	const result = runPython("search", queryText, String(topK), String(threshold)) as {
 		results?: { url: string; score: number; metadata: Record<string, unknown> }[];
 	} | null;
 	return result?.results ?? [];
 }
 
 /**
- * Insert entry into cache via Python service.
+ * Insert entry into the RAG pipeline.
  */
 export function insert(
 	url: string,
@@ -59,7 +60,7 @@ export function insert(
 }
 
 /**
- * Get cache statistics.
+ * Get RAG pipeline statistics.
  */
 export function stats(): {
 	total_entries: number;
@@ -76,7 +77,7 @@ export function stats(): {
 }
 
 /**
- * Initialize the RAG cache (download model).
+ * Initialize the RAG pipeline (download model).
  */
 export function init(): boolean {
 	const result = runPython("init") as string | null;

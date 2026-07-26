@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { preprocessText } from "./embeddings.js";
 
 const CACHE_FILE = "firecrawl-cache.json";
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -46,7 +47,6 @@ const COSTS: Record<string, number> = {
 };
 
 const JSON_SURCHARGE = 4;
-const ENHANCED_SURCHARGE = 4;
 
 // ─── Cache Management ────────────────────────────────────────────────────────
 
@@ -137,7 +137,7 @@ export async function shouldScrape(url: string, format = "markdown", title?: str
 	return { skip: false, reason: "No cached content found" };
 }
 
-function isCacheSufficient(results: any[], query: string): boolean {
+export function isCacheSufficient(results: any[], query: string): boolean {
 	if (!results || results.length === 0) return false;
 	const topScore = results[0]?.score ?? 0;
 	const resultCount = results.length;

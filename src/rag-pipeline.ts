@@ -10,7 +10,8 @@
  * 5. After Firecrawl returns → store content in RAG
  */
 
-import { query as ragQuery, store as ragStore } from "./rag-pipeline-client.js";
+import { query as ragQuery, store as ragStore, stats } from "./rag-pipeline-client.js";
+import { isCacheSufficient } from "./optimizer.js";
 
 // ─── Decision Logic ──────────────────────────────────────────────────────────
 
@@ -34,27 +35,6 @@ interface PipelineResult {
 	confidence: number;
 }
 
-/**
- * Determine if cached content is sufficient for the query.
- */
-function isCacheSufficient(results: RAGResult[], query: string): boolean {
-	if (!results || results.length === 0) return false;
-
-	const topScore = results[0]?.score ?? 0;
-	const resultCount = results.length;
-	const wordCount = query.split(" ").length;
-
-	// High confidence single match
-	if (topScore >= 0.8) return true;
-
-	// Multiple relevant results
-	if (resultCount >= 2 && results[1]?.score >= 0.5) return true;
-
-	// Simple query with decent match
-	if (wordCount <= 6 && topScore >= 0.6) return true;
-
-	return false;
-}
 
 /**
  * Synthesize content from multiple RAG results.
@@ -129,6 +109,5 @@ export function storeContent(
  * Get pipeline statistics.
  */
 export function getStats(): Record<string, unknown> {
-	const { stats } = require("./rag-pipeline-client.js");
 	return stats();
 }

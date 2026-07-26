@@ -118,51 +118,53 @@ export function setCachedEmbedding(text: string, embedding: number[]): void {
 	});
 }
 
-// ─── Stub Embedding Function ─────────────────────────────────────────────────
-// TODO: Replace with actual ONNX Runtime inference
-// For now, returns a deterministic pseudo-embedding based on text hash
+// ─── Embedding Function ─────────────────────────────────────────────────────
 
 /**
  * Generate embedding for text.
- * Currently a stub — returns a hash-based pseudo-vector.
- * Replace with actual model inference for production use.
+ * Requires a working embedding backend. Throws immediately if none is available,
+ * rather than silently returning a meaningless hash-based pseudo-vector.
+ *
+ * Setup options (pick one):
+ *   1. Install sentence-transformers:
+ *        pip install sentence-transformers
+ *      Then ensure the Python embedding server is running and
+ *      EMBEDDING_BACKEND is set to "python".
+ *
+ *   2. Configure an OpenVINO model:
+ *        Set EMBEDDING_BACKEND to "openvino" and point
+ *        OPENVINO_MODEL_PATH to a valid IR directory.
+ *
+ * Without one of these the cache will not produce meaningful results.
  */
 export async function embed(text: string): Promise<number[]> {
 	// Check cache first
 	const cached = getCachedEmbedding(text);
 	if (cached) return cached;
 
-	// Generate deterministic pseudo-embedding from text
-	const embedding = generatePseudoEmbedding(text);
-	setCachedEmbedding(text, embedding);
-
-	return embedding;
-}
-
-/**
- * Generate a deterministic pseudo-embedding from text.
- * This is a placeholder — real implementation will use ONNX Runtime.
- */
-function generatePseudoEmbedding(text: string): number[] {
-	const embedding = new Array(DEFAULT_DIMENSION).fill(0);
-
-	// Simple hash-based embedding
-	let hash = 0;
-	for (let i = 0; i < text.length; i++) {
-		const char = text.charCodeAt(i);
-		hash = ((hash << 5) - hash + char) | 0;
-		embedding[i % DEFAULT_DIMENSION] += hash / 1000;
+	const backend = process.env.EMBEDDING_BACKEND;
+	if (backend === "python") {
+		// TODO: call sentence-transformers embedding server
+		throw new Error(
+			'Python embedding backend is selected but the embedding server is not implemented yet. ' +
+			'Embeddings require a real model to produce meaningful vectors.'
+		);
+	}
+	if (backend === "openvino") {
+		// TODO: call OpenVINO inference
+		throw new Error(
+			'OpenVINO embedding backend is selected but inference is not implemented yet. ' +
+			'Embeddings require a real model to produce meaningful vectors.'
+		);
 	}
 
-	// Normalize
-	const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
-	if (norm > 0) {
-		for (let i = 0; i < embedding.length; i++) {
-			embedding[i] /= norm;
-		}
-	}
-
-	return embedding;
+	// No backend configured — fail loudly instead of returning fake embeddings
+	throw new Error(
+		'No embedding backend configured. RAG cache requires real embeddings to work correctly. ' +
+		'Set EMBEDDING_BACKEND to "python" and install sentence-transformers, ' +
+		'or set it to "openvino" and configure OPENVINO_MODEL_PATH. ' +
+		'Example: pip install sentence-transformers'
+	);
 }
 
 // ─── Batch Embedding ─────────────────────────────────────────────────────────

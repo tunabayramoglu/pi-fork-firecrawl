@@ -528,5 +528,3 @@ export async function addApiKey(apiKey: string): Promise<{
 	};
 }
 
-// ─── Startup: refresh quotas ─────────────────────────────────────────────────
-refreshAllQuotas().catch(() => {});

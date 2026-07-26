@@ -25,7 +25,9 @@ function runPython(command: string, ...args: string[]): unknown {
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		return JSON.parse(output.trim());
-	} catch {
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : String(err);
+		process.stderr.write(`[rag-pipeline] Python failed: ${msg}\n`);
 		return null;
 	}
 }

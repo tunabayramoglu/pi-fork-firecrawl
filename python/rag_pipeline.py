@@ -17,15 +17,12 @@ import hashlib
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional
 from urllib.parse import urlparse
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 CACHE_DIR = Path.home() / ".pi" / "agent" / "rag-cache"
 CACHE_DB = CACHE_DIR / "cache.db"
-USAGE_FILE = CACHE_DIR / "usage.json"
-CONFIG_FILE = CACHE_DIR / "config.json"
 
 DEFAULT_CONFIG = {
     # Model selection - supports any of these formats:
@@ -298,19 +295,19 @@ def init_db():
         return None
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
-	"""Calculate cosine similarity between two vectors."""
-	a = np.array(a, dtype=np.float32)
-	b = np.array(b, dtype=np.float32)
-	if a.shape[0] != b.shape[0]:
-		# Truncate to smaller dimension
-		min_dim = min(a.shape[0], b.shape[0])
-		a = a[:min_dim]
-		b = b[:min_dim]
-	norm_a = np.linalg.norm(a)
-	norm_b = np.linalg.norm(b)
-	if norm_a == 0 or norm_b == 0:
-		return 0.0
-	return float(np.dot(a, b) / (norm_a * norm_b))
+    """Calculate cosine similarity between two vectors."""
+    a = np.array(a, dtype=np.float32)
+    b = np.array(b, dtype=np.float32)
+    if a.shape[0] != b.shape[0]:
+        # Truncate to smaller dimension
+        min_dim = min(a.shape[0], b.shape[0])
+        a = a[:min_dim]
+        b = b[:min_dim]
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
 
 def store_entry(url: str, content: str, title: str = "", metadata: dict = None):
     """Store scraped content in the cache."""

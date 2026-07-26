@@ -45,7 +45,8 @@ Add a `keys` array to `~/.pi/agent/pi-firecrawl-keys.json`:
     "firecrawl_scrape", "firecrawl_crawl", "firecrawl_crawl_status",
     "firecrawl_map", "firecrawl_search",
     "firecrawl_parse", "firecrawl_interact",
-    "firecrawl_monitor_create", "firecrawl_monitor_list", "firecrawl_monitor_checks"
+    "firecrawl_monitor_create", "firecrawl_monitor_list", "firecrawl_monitor_checks",
+    "firecrawl_optimize"
   ],
   "keys": [
     {
@@ -183,6 +184,7 @@ Typical monthly usage for a coding agent:
 | monitor_create | varies by target | 1 credit/page per check |
 | monitor_list | 0 credits | List monitors |
 | monitor_checks | 0 credits | Get check results |
+| optimize | 0 credits | Cost estimation and tool routing |
 
 **Best for:** Reading a specific page you already know -- docs pages, API references, blog posts, single articles. Cheapest option when you just need one URL's content.
 
@@ -309,6 +311,25 @@ Target types:
 ### firecrawl_monitor_list -- 0 credits
 
 List all configured monitors with status, schedule, and last check summary.
+
+### firecrawl_optimize -- 0 credits
+
+Cost-optimized Firecrawl wrapper. Estimates credit cost, checks URL cache, and recommends the cheapest tool path.
+
+```json
+{
+  "goal": "get all blog posts from example.com",
+  "action": "estimate"
+}
+```
+
+Actions:
+- `estimate` (default) — recommend cheapest tool and estimate credits
+- `cache-check` — check if a URL is already cached
+- `budget` — show credit usage and remaining budget
+- `stats` — show cache statistics (URLs cached, credits saved)
+
+**Best for:** Always run before making Firecrawl calls to find cheaper alternatives. Prevents unnecessary spending.
 
 ### firecrawl_monitor_checks -- 0 credits
 

@@ -256,6 +256,9 @@ export function buildCommandGuide() {
 		"/firecrawl toggle — alias for /firecrawl tools",
 		"/firecrawl enable — enable all Firecrawl tools",
 		"/firecrawl disable — disable all Firecrawl tools",
+		"/firecrawl add-api <key> — add a Firecrawl API key (auto-checks quota)",
+		"/firecrawl remove-api <name> — remove a Firecrawl API key",
+		"/firecrawl list-api — list all configured API keys",
 	].join("\n");
 }
 

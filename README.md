@@ -3,6 +3,7 @@
 Fork of [`@narumitw/pi-firecrawl`](https://github.com/narumiruna/pi-extensions/tree/main/extensions/pi-firecrawl) with **multi-key rotation** and **quota-aware fallback** for multiple Firecrawl accounts.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+> **Based on [`@narumitw/pi-firecrawl`](https://github.com/narumiruna/pi-extensions/tree/main/extensions/pi-firecrawl)** by [narumitw](https://github.com/narumiruna). See [Upstream / Credits](#upstream--credits) for details.
 
 ## What this adds on top of the original
 
@@ -323,9 +324,25 @@ test/
   support.ts
 ```
 
-## Upstream
+## Upstream / Credits
 
-Forked from `@narumitw/pi-firecrawl` v0.30.1 ([source](https://github.com/narumiruna/pi-extensions/tree/main/extensions/pi-firecrawl)).
+This project is a fork of [`@narumitw/pi-firecrawl`](https://github.com/narumiruna/pi-extensions) by [narumitw](https://github.com/narumiruna), licensed under MIT.
+
+**Original source:** [`extensions/pi-firecrawl/`](https://github.com/narumiruna/pi-extensions/tree/main/extensions/pi-firecrawl) in the [`pi-extensions`](https://github.com/narumiruna/pi-extensions) monorepo.
+
+**Original npm package:** [`@narumitw/pi-firecrawl`](https://www.npmjs.com/package/@narumitw/pi-firecrawl) v0.30.1
+
+All original tool definitions, settings migration, tool selector UI, and extension registration code are authored by narumitw. This fork adds multi-key rotation, quota checking, and additional tools on top of that foundation.
+
+### What we changed
+
+| File | Change |
+|---|---|
+| `src/client.ts` | Replaced single-key HTTP client with multi-key manager, quota checking, 429 rotation, local usage persistence |
+| `src/tools.ts` | Added `firecrawl_parse` and `firecrawl_interact` tool definitions |
+| `src/firecrawl.ts` | Registered new tools |
+| `README.md` | Added multi-key docs, credit costs, scenario guide |
+| `.github/workflows/` | Added upstream sync verification CI |
 
 ## License
 

@@ -31,7 +31,7 @@
 		"check": "biome check . && npm run typecheck",
 		"format": "biome check --write .",
 		"typecheck": "tsc --noEmit",
-		"test": "node --import tsx --test test/*.test.ts"
+		"test": "node --import tsx --experimental-test-module-mocks --test test/rag-integration.test.ts"
 	},
 	"dependencies": {
 		"sqlite-vec": "^0.1.9",

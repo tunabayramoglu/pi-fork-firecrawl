@@ -31,6 +31,28 @@ function embed(text) {
 	const norm = Math.sqrt(embedding.reduce((s, v) => s + v * v, 0));
 	return embedding.map(v => v / norm);
 }
+import { execSync } from 'child_process';
+
+function ragQuery(queryText, topK = 1, threshold = 0.4) {
+	try {
+		const result = execSync(`python python/rag_pipeline.py query "${queryText.replace(/"/g, '\\"')}" ${topK} ${threshold}`, {
+			encoding: 'utf-8',
+			timeout: 10000,
+			cwd: 'C:/Users/Asus/Documents/_Projects/pi-firecrawl-multikey',
+		});
+		return JSON.parse(result.trim());
+	} catch { return { results: [] }; }
+}
+
+function ragStore(url, content, title) {
+	try {
+		execSync(`python python/rag_pipeline.py store "${url}" "${content.replace(/"/g, '\\"')}" "${title}"`, {
+			encoding: 'utf-8',
+			timeout: 10000,
+			cwd: 'C:/Users/Asus/Documents/_Projects/pi-firecrawl-multikey',
+		});
+	} catch {}
+}
 initStore();
 
 // Pre-populate URL cache
@@ -57,6 +79,12 @@ for (const { url, title } of semanticEntries) {
 	const embedding = await embed(text);
 	vectorInsert(url, embedding, { url, title, credits: 1 });
 }
+// Pre-populate RAG pipeline with content
+ragStore('https://example.com/blog/ai-tools', 'Best AI coding tools for developers in 2026. Includes GitHub Copilot, Cursor, and more.', 'AI Tools');
+ragStore('https://example.com/blog/dev-tools', 'Top development tools for software engineers. IDEs, linters, formatters.', 'Dev Tools');
+ragStore('https://example.com/docs/getting-started', 'Getting started guide for our platform. Step by step instructions.', 'Getting Started');
+ragStore('https://example.com/docs/api-reference', 'API documentation with endpoints, parameters, and examples.', 'API Docs');
+ragStore('https://example.com/pricing/plans', 'Pricing plans: Free, Hobby, Standard, Growth.', 'Pricing');
 
 const scenarios = [
 	// Easy: exact URL cache hits (0 credits)
@@ -104,6 +132,11 @@ const scenarios = [
 
 	// Edge cases
 	{ goal: "read this URL", url: "https://example.com/read", expectedTool: "firecrawl_scrape", expectCached: true },
+	// Semantic cache hits (RAG pipeline)
+	{ goal: "what are the best coding tools", expectedTool: "firecrawl_search", expectSemanticCached: true },
+	{ goal: "how to get started with the platform", expectedTool: "firecrawl_search", expectSemanticCached: true },
+	{ goal: "show me the API documentation", expectedTool: "firecrawl_search", expectSemanticCached: true },
+	{ goal: "what are the pricing options", expectedTool: "firecrawl_search", expectSemanticCached: true },
 	{ goal: "get data from website", expectedTool: "firecrawl_scrape" },
 	{ goal: "crawl example.com docs", expectedTool: "firecrawl_map" },
 	{ goal: "what's on this page", url: "https://example.com/what", expectedTool: "firecrawl_scrape", expectCached: true },
@@ -122,21 +155,27 @@ async function run() {
 		const recommendation = selectCheapestTool(scenario.goal);
 		const toolName = recommendation.tool.replace("firecrawl_", "");
 
-		let credits = 0;
-		if (scenario.url && (scenario.expectCached || scenario.expectSemanticCached)) {
-			const cacheResult = await shouldScrape(scenario.url);
-			if (cacheResult.skip) {
-				credits = 0;
-				cacheHits++;
-				if (cacheResult.reason.includes("Semantic match")) {
-					semanticHits++;
-				}
-			} else {
-				credits = estimateCost(toolName, { url: scenario.url }).estimatedCredits;
+	let credits = 0;
+	// Check RAG pipeline for semantic cache hits
+	const ragResult = ragQuery(scenario.goal, 1, 0.4);
+	if (ragResult.results && ragResult.results.length > 0) {
+		credits = 0;
+		cacheHits++;
+		semanticHits++;
+	} else if (scenario.url && (scenario.expectCached || scenario.expectSemanticCached)) {
+		const cacheResult = await shouldScrape(scenario.url);
+		if (cacheResult.skip) {
+			credits = 0;
+			cacheHits++;
+			if (cacheResult.reason.includes("Semantic match")) {
+				semanticHits++;
 			}
 		} else {
-			credits = estimateCost(toolName, scenario.url ? { url: scenario.url } : {}).estimatedCredits;
+			credits = estimateCost(toolName, { url: scenario.url }).estimatedCredits;
 		}
+	} else {
+		credits = estimateCost(toolName, scenario.url ? { url: scenario.url } : {}).estimatedCredits;
+	}
 
 		totalCredits += credits;
 		successes++;

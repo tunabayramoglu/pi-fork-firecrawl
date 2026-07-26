@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { hasApiKey } from "./client.js";
+import { addApiKey, hasApiKey, loadConfig, saveConfig } from "./client.js";
 import { loadSettings } from "./settings.js";
 import {
 	allFirecrawlTools,
@@ -24,6 +24,9 @@ const COMMAND_COMPLETIONS = [
 	{ value: "toggle", label: "toggle", description: "Select Firecrawl tools" },
 	{ value: "enable", label: "enable", description: "Enable all Firecrawl tools" },
 	{ value: "disable", label: "disable", description: "Disable all Firecrawl tools" },
+	{ value: "add-api", label: "add-api <key>", description: "Add a Firecrawl API key" },
+	{ value: "remove-api", label: "remove-api <name>", description: "Remove a Firecrawl API key" },
+	{ value: "list-api", label: "list-api", description: "List all configured API keys" },
 ];
 const MENU_OPTIONS = {
 	config: "Configuration quick start",
@@ -32,6 +35,9 @@ const MENU_OPTIONS = {
 	tools: "Select Firecrawl tools",
 	enable: "Enable all Firecrawl tools",
 	disable: "Disable all Firecrawl tools",
+	"add-api": "Add a Firecrawl API key",
+	"remove-api": "Remove a Firecrawl API key",
+	"list-api": "List all configured API keys",
 } as const;
 type CommandAction =
 	| "menu"
@@ -41,7 +47,10 @@ type CommandAction =
 	| "status"
 	| "tools"
 	| "enable"
-	| "disable";
+	| "disable"
+	| "add-api"
+	| "remove-api"
+	| "list-api";
 type CommandContext = ExtensionCommandContext;
 export default function firecrawl(pi: ExtensionAPI) {
 	pi.registerTool(scrapeTool);
@@ -102,10 +111,62 @@ async function handleFirecrawlCommand(pi: ExtensionAPI, args: string, ctx: Comma
 		case "enable":
 			await updateFirecrawlTools(pi, ctx, allFirecrawlTools(), "enabled all");
 			return;
-		case "disable":
-			await updateFirecrawlTools(pi, ctx, [], "disabled all");
+	case "disable":
+		await updateFirecrawlTools(pi, ctx, [], "disabled all");
+		return;
+	case "add-api": {
+		const key = args.trim().split(/\s+/).slice(1).join(" ").trim();
+		if (!key) {
+			ctx.ui.notify("Usage: /firecrawl add-api <your-api-key>", "warning");
 			return;
+		}
+		ctx.ui.notify("Checking quota...", "info");
+		const result = await addApiKey(key);
+		if (result.success) {
+			ctx.ui.notify(
+				`API key added as "${result.name}"\n` +
+					`Remaining credits: ${result.remainingCredits ?? "unknown"}\n` +
+					`Plan credits: ${result.planCredits ?? "unknown"}`,
+				"info",
+			);
+		} else {
+			ctx.ui.notify(`Failed to add API key: ${result.error}`, "error");
+		}
+		return;
 	}
+	case "remove-api": {
+		const name = args.trim().split(/\s+/).slice(1).join(" ").trim();
+		if (!name) {
+			ctx.ui.notify("Usage: /firecrawl remove-api <key-name>", "warning");
+			return;
+		}
+		const cfg = loadConfig();
+		const keys = cfg.keys ?? [];
+		const idx = keys.findIndex((k) => k.name === name);
+		if (idx === -1) {
+			ctx.ui.notify(`Key "${name}" not found. Use /firecrawl list-api to see all keys.`, "warning");
+			return;
+		}
+		keys.splice(idx, 1);
+		cfg.keys = keys;
+		saveConfig(cfg);
+		ctx.ui.notify(`Key "${name}" removed.`, "info");
+		return;
+	}
+	case "list-api": {
+		const cfg = loadConfig();
+		const keys = cfg.keys ?? [];
+		if (keys.length === 0) {
+			ctx.ui.notify("No API keys configured.\n\nUse: /firecrawl add-api <your-key>", "info");
+			return;
+		}
+		const lines = keys.map(
+			(k) => `${k.name}: ${k.key.slice(0, 8)}...${k.key.slice(-4)} (priority: ${k.priority}, quota: ${k.monthlyQuota ?? "auto"})`,
+		);
+		ctx.ui.notify(`Configured API keys (${keys.length}):\n${lines.join("\n")}`, "info");
+		return;
+	}
+}
 
 	ctx.ui.notify(`Unknown /firecrawl command: ${args.trim()}\n\n${buildCommandGuide()}`, "warning");
 }
@@ -143,7 +204,8 @@ async function showMenu(pi: ExtensionAPI, ctx: CommandContext) {
 }
 
 export function parseCommand(args: string): CommandAction | "unknown" {
-	const command = args.trim().toLowerCase();
+	const trimmed = args.trim();
+	const command = trimmed.split(/\s+/)[0]?.toLowerCase() ?? "";
 	if (!command) return "menu";
 	if (command === "help") return "help";
 	if (command === "config") return "config";
@@ -152,6 +214,9 @@ export function parseCommand(args: string): CommandAction | "unknown" {
 	if (command === "tools" || command === "select" || command === "toggle") return "tools";
 	if (command === "enable" || command === "on") return "enable";
 	if (command === "disable" || command === "off") return "disable";
+	if (command === "add-api") return "add-api";
+	if (command === "remove-api") return "remove-api";
+	if (command === "list-api") return "list-api";
 	return "unknown";
 }
 
@@ -171,6 +236,8 @@ export {
 	jsonResult,
 	normalizeApiUrl,
 	parseResponseBody,
+	loadConfig,
+	saveConfig,
 } from "./client.js";
 export { installSettingsFileExclusively, normalizeFirecrawlSettings } from "./settings.js";
 export { formatPersistedSelection, orderedFirecrawlTools } from "./tool-selector.js";

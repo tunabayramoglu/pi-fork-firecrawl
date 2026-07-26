@@ -290,12 +290,29 @@ Parameters:
 Opens a menu with configuration, tool status, and controls.
 
 ```text
-/firecrawl help       -- show command usage
-/firecrawl config     -- show API key presence and URL
-/firecrawl status     -- show tool and settings status
-/firecrawl tools      -- select individual Firecrawl tools
-/firecrawl enable     -- enable all tools
-/firecrawl disable    -- disable all tools
+/firecrawl               -- open this menu
+/firecrawl help          -- show command usage
+/firecrawl config        -- show API key presence and URL
+/firecrawl status        -- show tool and settings status
+/firecrawl tools         -- select individual Firecrawl tools
+/firecrawl enable        -- enable all tools
+/firecrawl disable       -- disable all tools
+/firecrawl add-api <key> -- add a Firecrawl API key (auto-checks quota)
+/firecrawl remove-api <name> -- remove a Firecrawl API key
+/firecrawl list-api      -- list all configured API keys
+```
+
+**API key management:**
+
+```text
+/firecrawl add-api fc-your-key-here
+  → Checks quota via Firecrawl API, saves key to config, shows remaining credits
+
+/firecrawl list-api
+  → Shows all keys with name, masked key, priority, and quota
+
+/firecrawl remove-api key-1
+  → Removes the key by name
 ```
 
 ## CI/CD

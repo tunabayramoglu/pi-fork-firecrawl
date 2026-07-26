@@ -51,7 +51,7 @@ function agentDir(): string {
 	return process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
 }
 
-function loadConfig(): FirecrawlConfig {
+export function loadConfig(): FirecrawlConfig {
 	const now = Date.now();
 	if (configCache && now - configCacheTime < CONFIG_CACHE_TTL) return configCache;
 
@@ -64,6 +64,17 @@ function loadConfig(): FirecrawlConfig {
 		configCache = {};
 		configCacheTime = now;
 		return configCache!;
+	}
+}
+export function saveConfig(config: FirecrawlConfig): void {
+	configCache = config;
+	configCacheTime = Date.now();
+	try {
+		const dir = agentDir();
+		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+		writeFileSync(join(agentDir(), CONFIG_FILE), JSON.stringify(config, null, 2), "utf8");
+	} catch {
+		// best effort
 	}
 }
 
@@ -436,6 +447,77 @@ export function cleanObject<T>(value: T): T {
 			.filter(([, item]) => item !== undefined)
 			.map(([key, item]) => [key, cleanObject(item)]),
 	) as T;
+}
+
+// ─── Key Management ──────────────────────────────────────────────────────────
+
+export { checkQuota };
+
+/**
+ * Add a new API key to the config, check its quota, and return the result.
+ */
+export async function addApiKey(apiKey: string): Promise<{
+	success: boolean;
+	name?: string;
+	remainingCredits?: number;
+	planCredits?: number;
+	error?: string;
+}> {
+	const config = loadConfig();
+	const keys = config.keys ?? [];
+
+	// Check if key already exists
+	if (keys.some((k) => k.key === apiKey)) {
+		return { success: false, error: "Key already exists in config" };
+	}
+
+	// Check quota before adding
+	const quota = await checkQuota(apiKey);
+	if (quota.error) {
+		return { success: false, error: `Quota check failed: ${quota.error}` };
+	}
+
+	const name = `key-${keys.length + 1}`;
+	const newKey = {
+		name,
+		key: apiKey,
+		priority: keys.length + 1,
+		monthlyQuota: quota.planCredits ?? 1000,
+		disabled: false,
+	};
+
+	keys.push(newKey);
+	config.keys = keys;
+
+	// Save config
+	try {
+		writeFileSync(join(agentDir(), CONFIG_FILE), JSON.stringify(config, null, 2), "utf8");
+	} catch {
+		return { success: false, error: "Failed to write config file" };
+	}
+
+	// Update usage store
+	const store = loadUsage();
+	store.keys[apiKey] = {
+		key: apiKey,
+		usedCredits: quota.planCredits
+			? quota.planCredits - (quota.remainingCredits ?? 0)
+			: 0,
+		remainingCredits: quota.remainingCredits,
+		planCredits: quota.planCredits,
+		lastChecked: new Date().toISOString(),
+	};
+	saveUsage(store);
+
+	// Refresh key list
+	lastKeyListRefresh = 0;
+
+	return {
+		success: true,
+		name,
+		remainingCredits: quota.remainingCredits,
+		planCredits: quota.planCredits,
+	};
 }
 
 // ─── Startup: refresh quotas ─────────────────────────────────────────────────

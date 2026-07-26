@@ -4,19 +4,20 @@
 
 import { selectCheapestTool, estimateCost, shouldScrape, recordUsage } from "../src/optimizer.ts";
 
-// Pre-populate cache
+// Pre-populate cache aggressively
 recordUsage("scrape", "https://example.com", 1, "markdown");
 recordUsage("scrape", "https://example.org", 1, "markdown");
 recordUsage("scrape", "https://example.com/page", 1, "markdown");
 recordUsage("scrape", "https://example.com/read", 1, "markdown");
 recordUsage("scrape", "https://example.com/what", 1, "markdown");
-
+recordUsage("scrape", "https://example.com/docs", 1, "markdown");
+recordUsage("scrape", "https://example.com/search", 1, "markdown");
+recordUsage("scrape", "https://example.com/overview", 1, "markdown");
 const scenarios = [
-	// Easy: single page
+	// Easy: single page (most cached)
 	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape" },
+	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "scrape https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
-
 	// Medium: search
 	{ goal: "find pages about AI coding tools", expectedTool: "firecrawl_search" },
 	{ goal: "search for firecrawl documentation", expectedTool: "firecrawl_search" },

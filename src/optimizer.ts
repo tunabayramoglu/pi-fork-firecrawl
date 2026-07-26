@@ -237,12 +237,12 @@ export function selectCheapestTool(goal: string): {
 		};
 	}
 
-	// Search + selective scrape
+	// Search + selective scrape (suggest low result count)
 	if (lower.includes("search") || lower.includes("find") || lower.includes("discover") || lower.includes("look for") || lower.includes("articles") || lower.includes("documentation") || lower.includes("recent")) {
 		return {
 			tool: "firecrawl_search",
-			params: {},
-			reason: "Search discovers relevant pages. Scrape only top results after.",
+			params: { limit: 3 },
+			reason: "Search discovers relevant pages. Limit to 3 results to save credits (2 cr vs 6 cr for 10).",
 		};
 	}
 

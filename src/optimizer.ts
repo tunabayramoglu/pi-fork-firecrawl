@@ -113,24 +113,21 @@ export async function shouldScrape(url: string, format = "markdown", title?: str
 		return { skip: true, reason: `Already scraped ${entry.tool} at ${entry.timestamp} (${entry.credits} credits saved)` };
 	}
 
-	// 2. Semantic similarity check (RAG cache)
+	// 2. Semantic similarity check (RAG cache via Python service)
 	try {
-		const { embed } = await import("./embeddings.js");
-		const { search: vectorSearch } = await import("./vector-store.js");
+		const { search: ragSearch } = await import("./rag-client.js");
 		const queryText = preprocessText(url, title);
-		const queryEmbedding = await embed(queryText);
-		const results = vectorSearch(queryEmbedding, 1, 0.85);
+		const results = ragSearch(queryText, 1, 0.85);
 
 		if (results.length > 0 && results[0].score > 0.85) {
 			const matched = results[0];
-			const cachedUrl = (matched.metadata.url as string) ?? "unknown";
 			return {
 				skip: true,
-				reason: `Semantic match: ${cachedUrl} (similarity: ${matched.score.toFixed(2)}) — ${matched.metadata.credits ?? 0} credits saved`,
+				reason: `Semantic match: ${matched.url} (similarity: ${matched.score.toFixed(2)}) — ${matched.metadata.credits ?? 0} credits saved`,
 			};
 		}
 	} catch {
-		// Semantic search not available — fall through to URL-only cache
+		// RAG service not available — fall through to URL-only cache
 	}
 
 	return { skip: false, reason: "URL not cached" };
@@ -147,15 +144,13 @@ export async function recordUsage(tool: string, url: string, credits: number, fo
 	store.totalCreditsUsed += credits;
 	saveCache(store);
 
-	// Store embedding for semantic similarity search
+	// Store embedding for semantic similarity search (via Python RAG service)
 	try {
-		const { embed } = await import("./embeddings.js");
-		const { insert } = await import("./vector-store.js");
+		const { insert: ragInsert } = await import("./rag-client.js");
 		const text = preprocessText(url, title);
-		const embedding = await embed(text);
-		insert(url, embedding, { url, tool, credits, format, title });
+		ragInsert(url, text, { url, tool, credits, format, title });
 	} catch {
-		// Embedding not available — skip
+		// RAG service not available — skip
 	}
 }
 

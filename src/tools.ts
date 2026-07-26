@@ -13,6 +13,7 @@ export const FIRECRAWL_TOOL_NAMES = [
 	"firecrawl_monitor_create",
 	"firecrawl_monitor_list",
 	"firecrawl_monitor_checks",
+	"firecrawl_optimize",
 ] as const;
 export type FirecrawlToolName = (typeof FIRECRAWL_TOOL_NAMES)[number];
 
@@ -435,6 +436,94 @@ export const monitorChecksTool = defineTool({
 			const path = `/monitor/${encodeURIComponent(params.id)}/checks${qs ? `?${qs}` : ""}`;
 			const payload = await firecrawlRequest("GET", path, undefined, signal);
 			return jsonResult(payload);
+		});
+	},
+});
+export const optimizeTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[10],
+	label: "Firecrawl: Optimize",
+	description:
+		"Cost-optimized Firecrawl wrapper. Estimates credit cost, checks URL cache, and recommends the cheapest tool path for a goal.",
+	promptSnippet: "Optimize Firecrawl usage for cost efficiency",
+	promptGuidelines: [
+		"Use firecrawl_optimize BEFORE making any Firecrawl call to estimate cost and find cheaper alternatives.",
+		"It checks the local URL cache to skip re-fetches and suggests the cheapest tool for the goal.",
+	],
+	parameters: Type.Object({
+		goal: Type.String({
+			description:
+				"Describe what you want to achieve. The optimizer will recommend the cheapest path.",
+		}),
+		url: Type.Optional(
+			Type.String({ description: "Specific URL to check cache status for." }),
+		),
+		action: Type.Optional(
+			Type.String({
+				description:
+					'"estimate" (default) - estimate cost and suggest tool. "cache-check" - check if URL is cached. "budget" - show credit usage. "stats" - show cache statistics.',
+				enum: ["estimate", "cache-check", "budget", "stats"],
+			}),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "optimize", async () => {
+			const { selectCheapestTool, estimateCost, shouldScrape, getBudgetStatus, getCacheStats } = await import("./optimizer.js");
+
+			const action = (params.action as string) ?? "estimate";
+
+			if (action === "budget") {
+				const budget = getBudgetStatus();
+				return jsonResult({
+					...budget,
+					message: budget.monthlyBudget > 0
+						? `Used ${budget.totalUsed}/${budget.monthlyBudget} credits (${budget.percentage}%)`
+						: "No budget set. Use setMonthlyBudget() to configure.",
+				});
+			}
+
+			if (action === "stats") {
+				const stats = getCacheStats();
+				return jsonResult({
+					...stats,
+					message: `Cached ${stats.totalUrls} URLs, saved ${stats.totalCreditsSaved} credits`,
+				});
+			}
+
+			if (action === "cache-check" && params.url) {
+				const result = shouldScrape(params.url as string);
+				return jsonResult({
+					url: params.url,
+					...result,
+					message: result.skip
+						? `SKIP: ${result.reason}`
+						: `FETCH: ${result.reason}`,
+				});
+			}
+
+			// Default: estimate cost and suggest tool
+			const recommendation = selectCheapestTool(params.goal as string);
+			const cost = estimateCost(recommendation.tool.replace("firecrawl_", ""), params.url ? { url: params.url } : {});
+
+			// Check URL cache if provided
+			let cacheStatus = null;
+			if (params.url) {
+				const cached = shouldScrape(params.url as string);
+				cacheStatus = cached;
+			}
+
+			return jsonResult({
+				goal: params.goal,
+				recommendedTool: recommendation.tool,
+				reason: recommendation.reason,
+				estimatedCredits: cost.estimatedCredits,
+				costBreakdown: cost.reason,
+				cheaperAlternative: cost.cheaperAlternative,
+				alternativeSavings: cost.alternativeSavings,
+				cacheStatus,
+				tip: cost.cheaperAlternative
+					? `Consider using ${cost.cheaperAlternative} instead to save ${cost.alternativeSavings} credits.`
+					: "This is already the cheapest option.",
+			});
 		});
 	},
 });

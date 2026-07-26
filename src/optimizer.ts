@@ -96,30 +96,47 @@ function normalizeUrl(url: string): string {
 
 // ─── URL Deduplication ───────────────────────────────────────────────────────
 
-export function shouldScrape(url: string, format = "markdown"): { skip: boolean; reason: string } {
+export async function shouldScrape(url: string, format = "markdown", title?: string): Promise<{ skip: boolean; reason: string }> {
 	const store = loadCache();
 	const normalized = normalizeUrl(url);
 
-	// Check exact match first, then normalized
+	// 1. Check exact match
 	const entry = store.scraped[url] ?? store.scraped[normalized];
-
-	if (!entry) {
-		return { skip: false, reason: "URL not cached" };
+	if (entry) {
+		const age = Date.now() - new Date(entry.timestamp).getTime();
+		if (age > CACHE_TTL) {
+			return { skip: false, reason: "Cache expired" };
+		}
+		if (entry.format !== format) {
+			return { skip: false, reason: `Different format requested (cached: ${entry.format}, requested: ${format})` };
+		}
+		return { skip: true, reason: `Already scraped ${entry.tool} at ${entry.timestamp} (${entry.credits} credits saved)` };
 	}
 
-	const age = Date.now() - new Date(entry.timestamp).getTime();
-	if (age > CACHE_TTL) {
-		return { skip: false, reason: "Cache expired" };
+	// 2. Semantic similarity check (RAG cache)
+	try {
+		const { embed } = await import("./embeddings.js");
+		const { search: vectorSearch } = await import("./vector-store.js");
+		const queryText = preprocessText(url, title);
+		const queryEmbedding = await embed(queryText);
+		const results = vectorSearch(queryEmbedding, 1, 0.85);
+
+		if (results.length > 0 && results[0].score > 0.85) {
+			const matched = results[0];
+			const cachedUrl = (matched.metadata.url as string) ?? "unknown";
+			return {
+				skip: true,
+				reason: `Semantic match: ${cachedUrl} (similarity: ${matched.score.toFixed(2)}) — ${matched.metadata.credits ?? 0} credits saved`,
+			};
+		}
+	} catch {
+		// Semantic search not available — fall through to URL-only cache
 	}
 
-	if (entry.format !== format) {
-		return { skip: false, reason: `Different format requested (cached: ${entry.format}, requested: ${format})` };
-	}
-
-	return { skip: true, reason: `Already scraped ${entry.tool} at ${entry.timestamp} (${entry.credits} credits saved)` };
+	return { skip: false, reason: "URL not cached" };
 }
 
-export function recordUsage(tool: string, url: string, credits: number, format = "markdown"): void {
+export async function recordUsage(tool: string, url: string, credits: number, format = "markdown", title?: string): Promise<void> {
 	const store = loadCache();
 	const normalized = normalizeUrl(url);
 	const entry = { url, tool, format, timestamp: new Date().toISOString(), credits };
@@ -129,6 +146,17 @@ export function recordUsage(tool: string, url: string, credits: number, format =
 	}
 	store.totalCreditsUsed += credits;
 	saveCache(store);
+
+	// Store embedding for semantic similarity search
+	try {
+		const { embed } = await import("./embeddings.js");
+		const { insert } = await import("./vector-store.js");
+		const text = preprocessText(url, title);
+		const embedding = await embed(text);
+		insert(url, embedding, { url, tool, credits, format, title });
+	} catch {
+		// Embedding not available — skip
+	}
 }
 
 // ─── Cost Estimation ─────────────────────────────────────────────────────────

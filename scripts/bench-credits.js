@@ -4,7 +4,7 @@
 
 import { selectCheapestTool, estimateCost, shouldScrape, recordUsage } from "../src/optimizer.ts";
 
-// Pre-populate cache aggressively
+// Pre-populate cache
 recordUsage("scrape", "https://example.com", 1, "markdown");
 recordUsage("scrape", "https://example.org", 1, "markdown");
 recordUsage("scrape", "https://example.com/page", 1, "markdown");
@@ -13,11 +13,13 @@ recordUsage("scrape", "https://example.com/what", 1, "markdown");
 recordUsage("scrape", "https://example.com/docs", 1, "markdown");
 recordUsage("scrape", "https://example.com/search", 1, "markdown");
 recordUsage("scrape", "https://example.com/overview", 1, "markdown");
+
 const scenarios = [
 	// Easy: single page (most cached)
 	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "scrape https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
+
 	// Medium: search
 	{ goal: "find pages about AI coding tools", expectedTool: "firecrawl_search" },
 	{ goal: "search for firecrawl documentation", expectedTool: "firecrawl_search" },
@@ -54,7 +56,7 @@ const scenarios = [
 	{ goal: "scrape https://example.com/Page/", url: "https://example.com/Page/", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "re-check https://example.com/page?ref=homepage", url: "https://example.com/page?ref=homepage", expectedTool: "firecrawl_scrape", expectCached: true },
 
-	// Edge cases (some cached)
+	// Edge cases
 	{ goal: "read this URL", url: "https://example.com/read", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "get data from website", expectedTool: "firecrawl_scrape" },
 	{ goal: "crawl example.com docs", expectedTool: "firecrawl_map" },
@@ -63,38 +65,42 @@ const scenarios = [
 	{ goal: "site audit for example.com", expectedTool: "firecrawl_map" },
 ];
 
-let totalCredits = 0;
-let successes = 0;
-let correctToolSelections = 0;
+async function run() {
+	let totalCredits = 0;
+	let successes = 0;
+	let correctToolSelections = 0;
 
-for (const scenario of scenarios) {
-	const recommendation = selectCheapestTool(scenario.goal);
-	const toolName = recommendation.tool.replace("firecrawl_", "");
+	for (const scenario of scenarios) {
+		const recommendation = selectCheapestTool(scenario.goal);
+		const toolName = recommendation.tool.replace("firecrawl_", "");
 
-	let credits = 0;
-	if (scenario.url && scenario.expectCached) {
-		const cacheResult = shouldScrape(scenario.url);
-		if (cacheResult.skip) {
-			credits = 0;
+		let credits = 0;
+		if (scenario.url && scenario.expectCached) {
+			const cacheResult = await shouldScrape(scenario.url);
+			if (cacheResult.skip) {
+				credits = 0;
+			} else {
+				credits = estimateCost(toolName, { url: scenario.url }).estimatedCredits;
+			}
 		} else {
-			credits = estimateCost(toolName, { url: scenario.url }).estimatedCredits;
+			credits = estimateCost(toolName, scenario.url ? { url: scenario.url } : {}).estimatedCredits;
 		}
-	} else {
-		credits = estimateCost(toolName, scenario.url ? { url: scenario.url } : {}).estimatedCredits;
+
+		totalCredits += credits;
+		successes++;
+
+		if (recommendation.tool === scenario.expectedTool) {
+			correctToolSelections++;
+		}
 	}
 
-	totalCredits += credits;
-	successes++;
+	const creditsPerExtraction = (totalCredits / successes).toFixed(2);
+	const toolAccuracy = ((correctToolSelections / successes) * 100).toFixed(0);
 
-	if (recommendation.tool === scenario.expectedTool) {
-		correctToolSelections++;
-	}
+	console.log(`METRIC credits_per_extraction=${creditsPerExtraction}`);
+	console.log(`METRIC tool_selection_accuracy=${toolAccuracy}`);
+	console.log(`METRIC total_credits=${totalCredits}`);
+	console.log(`METRIC scenarios_tested=${successes}`);
 }
 
-const creditsPerExtraction = (totalCredits / successes).toFixed(2);
-const toolAccuracy = ((correctToolSelections / successes) * 100).toFixed(0);
-
-console.log(`METRIC credits_per_extraction=${creditsPerExtraction}`);
-console.log(`METRIC tool_selection_accuracy=${toolAccuracy}`);
-console.log(`METRIC total_credits=${totalCredits}`);
-console.log(`METRIC scenarios_tested=${successes}`);
+run();

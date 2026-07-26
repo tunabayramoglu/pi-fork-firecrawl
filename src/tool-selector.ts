@@ -259,6 +259,11 @@ export function buildCommandGuide() {
 		"/firecrawl add-api <key> — add a Firecrawl API key (auto-checks quota)",
 		"/firecrawl remove-api <name> — remove a Firecrawl API key",
 		"/firecrawl list-api — list all configured API keys",
+		"",
+		"Monitor commands (via tools):",
+		"firecrawl_monitor_create — create a recurring page monitor",
+		"firecrawl_monitor_list — list all monitors",
+		"firecrawl_monitor_checks — get check results for a monitor",
 	].join("\n");
 }
 

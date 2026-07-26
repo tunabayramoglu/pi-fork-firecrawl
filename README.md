@@ -44,7 +44,8 @@ Add a `keys` array to `~/.pi/agent/pi-firecrawl-keys.json`:
   "tools": [
     "firecrawl_scrape", "firecrawl_crawl", "firecrawl_crawl_status",
     "firecrawl_map", "firecrawl_search",
-    "firecrawl_parse", "firecrawl_interact"
+    "firecrawl_parse", "firecrawl_interact",
+    "firecrawl_monitor_create", "firecrawl_monitor_list", "firecrawl_monitor_checks"
   ],
   "keys": [
     {
@@ -177,9 +178,11 @@ Typical monthly usage for a coding agent:
 | interact | 2 credits/minute | Browser session time |
 
 
-### firecrawl_scrape -- 1 credit/page
-
-Scrape a single URL into markdown, HTML, raw HTML, links, screenshots, or JSON.
+| parse | 1 credit/page | Per PDF page; base64 upload |
+| interact | 2 credits/minute | Browser session time |
+| monitor_create | varies by target | 1 credit/page per check |
+| monitor_list | 0 credits | List monitors |
+| monitor_checks | 0 credits | Get check results |
 
 **Best for:** Reading a specific page you already know -- docs pages, API references, blog posts, single articles. Cheapest option when you just need one URL's content.
 
@@ -279,6 +282,37 @@ Parameters:
 - `ttl` -- Session lifetime in seconds (30-3600, default 600).
 - `activityTtl` -- Inactivity timeout (10-3600, default 300).
 - `profile` -- Persistent storage config across sessions.
+
+### firecrawl_monitor_create -- credits vary by target
+
+Create a recurring monitor that watches pages for changes and notifies via webhook or email.
+
+```json
+{
+  "name": "Blog monitor",
+  "schedule": { "text": "every 30 minutes", "timezone": "UTC" },
+  "targets": [
+    { "type": "scrape", "urls": ["https://example.com/blog"] }
+  ],
+  "goal": "Notify me when a new blog post is published",
+  "notification": {
+    "email": { "enabled": true, "recipients": ["you@example.com"], "includeDiffs": true }
+  }
+}
+```
+
+Target types:
+- `{ type: "scrape", urls: [...] }` — watch specific URLs
+- `{ type: "crawl", url: "...", crawlOptions: { limit: 100 } }` — watch a whole site
+- `{ type: "search", queries: [...] }` — watch web search results (requires `goal`)
+
+### firecrawl_monitor_list -- 0 credits
+
+List all configured monitors with status, schedule, and last check summary.
+
+### firecrawl_monitor_checks -- 0 credits
+
+Get check results for a specific monitor. Shows what changed, new pages, and diffs.
 
 ## Command
 

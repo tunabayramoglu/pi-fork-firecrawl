@@ -10,6 +10,9 @@ export const FIRECRAWL_TOOL_NAMES = [
 	"firecrawl_search",
 	"firecrawl_parse",
 	"firecrawl_interact",
+	"firecrawl_monitor_create",
+	"firecrawl_monitor_list",
+	"firecrawl_monitor_checks",
 ] as const;
 export type FirecrawlToolName = (typeof FIRECRAWL_TOOL_NAMES)[number];
 
@@ -308,6 +311,129 @@ export const interactTool = defineTool({
 				cleanObject(params),
 				signal,
 			);
+			return jsonResult(payload);
+		});
+	},
+});
+export const monitorCreateTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[7],
+	label: "Firecrawl: Monitor Create",
+	description:
+		"Create a recurring monitor that watches pages for changes and notifies via webhook or email.",
+	promptSnippet: "Create a Firecrawl page monitor",
+	promptGuidelines: [
+		"Use firecrawl_monitor_create when the user wants to be notified when a page changes.",
+		"Supports scrape targets (specific URLs), crawl targets (whole site), and search targets (web-wide queries).",
+		"Set a goal in plain language to judge whether changes are meaningful.",
+	],
+	parameters: Type.Object({
+		name: Type.String({ description: "Name for this monitor.", maxLength: 256 }),
+		schedule: Type.Object({
+			cron: Type.Optional(
+				Type.String({ description: "Five-field cron expression. Min interval 5 minutes." }),
+			),
+			text: Type.Optional(
+				Type.String({
+					description:
+						'Natural language schedule, e.g. "every 30 minutes", "daily at 9am", "weekly".',
+				}),
+			),
+			timezone: Type.Optional(
+				Type.String({ description: "IANA timezone. Default UTC.", default: "UTC" }),
+			),
+		}),
+		targets: Type.Array(Type.Any(), {
+			description:
+				'Array of targets. Scrape: { type: "scrape", urls: [...] }. Crawl: { type: "crawl", url: "..." }. Search: { type: "search", queries: [...] }.',
+			minItems: 1,
+			maxItems: 50,
+		}),
+		goal: Type.Optional(
+			Type.String({
+				description:
+					"Plain-language goal to judge whether changed pages are meaningful. Required for search targets.",
+				maxLength: 2000,
+			}),
+		),
+		webhook: Type.Optional(
+			Type.Object({
+				url: Type.String({ description: "Webhook URL to send events to." }),
+				events: Type.Optional(
+					Type.Array(Type.String(), {
+						description: 'Events to receive: "monitor.page", "monitor.check.completed".',
+					}),
+				),
+			}),
+		),
+		notification: Type.Optional(
+			Type.Object({
+				email: Type.Object({
+					enabled: Type.Boolean({ default: false }),
+					recipients: Type.Array(Type.String(), { maxItems: 25 }),
+					includeDiffs: Type.Optional(Type.Boolean({ default: false })),
+				}),
+			}),
+		),
+		retentionDays: Type.Optional(
+			Type.Number({ description: "Days to retain check data. 1-365, default 30.", minimum: 1, maximum: 365 }),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "monitor create", async () => {
+			const payload = await firecrawlRequest("POST", "/monitor", cleanObject(params), signal);
+			return jsonResult(payload);
+		});
+	},
+});
+
+export const monitorListTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[8],
+	label: "Firecrawl: Monitor List",
+	description: "List all configured Firecrawl monitors.",
+	promptSnippet: "List Firecrawl monitors",
+	parameters: Type.Object({
+		limit: Type.Optional(
+			Type.Number({ description: "Max monitors to return. 1-100, default 25.", minimum: 1, maximum: 100 }),
+		),
+		offset: Type.Optional(
+			Type.Number({ description: "Offset for pagination. Default 0.", minimum: 0 }),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "monitor list", async () => {
+			const query = new URLSearchParams();
+			if (params.limit) query.set("limit", String(params.limit));
+			if (params.offset) query.set("offset", String(params.offset));
+			const qs = query.toString();
+			const path = `/monitor${qs ? `?${qs}` : ""}`;
+			const payload = await firecrawlRequest("GET", path, undefined, signal);
+			return jsonResult(payload);
+		});
+	},
+});
+
+export const monitorChecksTool = defineTool({
+	name: FIRECRAWL_TOOL_NAMES[9],
+	label: "Firecrawl: Monitor Checks",
+	description: "Get check results for a specific Firecrawl monitor.",
+	promptSnippet: "Get Firecrawl monitor check results",
+	parameters: Type.Object({
+		id: Type.String({ description: "Monitor ID (UUID)." }),
+		limit: Type.Optional(
+			Type.Number({ description: "Max checks to return. 1-100, default 25.", minimum: 1, maximum: 100 }),
+		),
+		offset: Type.Optional(
+			Type.Number({ description: "Offset for pagination. Default 0.", minimum: 0 }),
+		),
+	}),
+	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		return withStatus(ctx, "monitor checks", async () => {
+			const query = new URLSearchParams();
+			if (params.limit) query.set("limit", String(params.limit));
+			if (params.offset) query.set("offset", String(params.offset));
+			const qs = query.toString();
+			const path = `/monitor/${encodeURIComponent(params.id)}/checks${qs ? `?${qs}` : ""}`;
+			const payload = await firecrawlRequest("GET", path, undefined, signal);
 			return jsonResult(payload);
 		});
 	},

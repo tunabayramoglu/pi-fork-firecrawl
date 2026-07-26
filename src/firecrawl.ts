@@ -12,7 +12,7 @@ import {
 	showToolSelector,
 	updateFirecrawlTools,
 } from "./tool-selector.js";
-import { crawlStatusTool, crawlTool, interactTool, mapTool, parseTool, scrapeTool, searchTool } from "./tools.js";
+import { crawlStatusTool, crawlTool, interactTool, mapTool, monitorChecksTool, monitorCreateTool, monitorListTool, parseTool, scrapeTool, searchTool } from "./tools.js";
 
 const STATUS_KEY = "firecrawl";
 const COMMAND_COMPLETIONS = [
@@ -60,6 +60,9 @@ export default function firecrawl(pi: ExtensionAPI) {
 	pi.registerTool(searchTool);
 	pi.registerTool(parseTool);
 	pi.registerTool(interactTool);
+	pi.registerTool(monitorCreateTool);
+	pi.registerTool(monitorListTool);
+	pi.registerTool(monitorChecksTool);
 
 	pi.registerCommand("firecrawl", {
 		description: "Open Firecrawl help and tool controls",

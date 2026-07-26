@@ -7,7 +7,6 @@ import { selectCheapestTool, estimateCost, shouldScrape, recordUsage } from "../
 // Pre-populate cache with some URLs to test cache hits
 recordUsage("scrape", "https://example.com", 1, "markdown");
 recordUsage("scrape", "https://example.org", 1, "markdown");
-// Also cache normalized versions for URL normalization tests
 recordUsage("scrape", "https://example.com/page", 1, "markdown");
 
 const scenarios = [
@@ -37,7 +36,7 @@ const scenarios = [
 	// Hard: interact
 	{ goal: "login and scrape dashboard", expectedTool: "firecrawl_interact" },
 
-	// Hard: crawl alternatives (map+scrape is cheaper)
+	// Hard: crawl alternatives
 	{ goal: "get 5 pages from a 100-page site", expectedTool: "firecrawl_map" },
 	{ goal: "extract content from specific pages only", expectedTool: "firecrawl_scrape" },
 
@@ -49,10 +48,16 @@ const scenarios = [
 	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "re-check https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
 
-	// Hard: URL normalization (tracking params, trailing slash, case)
+	// Hard: URL normalization
 	{ goal: "scrape https://example.com/page?utm_source=google&utm_medium=cpc", url: "https://example.com/page?utm_source=google&utm_medium=cpc", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "scrape https://example.com/Page/", url: "https://example.com/Page/", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "re-check https://example.com/page?ref=homepage", url: "https://example.com/page?ref=homepage", expectedTool: "firecrawl_scrape", expectCached: true },
+
+	// Edge cases
+	{ goal: "read this URL", url: "https://example.com/read", expectedTool: "firecrawl_scrape" },
+	{ goal: "get data from website", expectedTool: "firecrawl_scrape" },
+	{ goal: "crawl example.com docs", expectedTool: "firecrawl_map" },
+	{ goal: "what's on this page", url: "https://example.com/what", expectedTool: "firecrawl_scrape" },
 ];
 
 let totalCredits = 0;
@@ -67,7 +72,7 @@ for (const scenario of scenarios) {
 	if (scenario.url && scenario.expectCached) {
 		const cacheResult = shouldScrape(scenario.url);
 		if (cacheResult.skip) {
-			credits = 0; // cache hit — no credits
+			credits = 0;
 		} else {
 			credits = estimateCost(toolName, { url: scenario.url }).estimatedCredits;
 		}
@@ -86,7 +91,6 @@ for (const scenario of scenarios) {
 const creditsPerExtraction = (totalCredits / successes).toFixed(2);
 const toolAccuracy = ((correctToolSelections / successes) * 100).toFixed(0);
 
-// Emit metrics
 console.log(`METRIC credits_per_extraction=${creditsPerExtraction}`);
 console.log(`METRIC tool_selection_accuracy=${toolAccuracy}`);
 console.log(`METRIC total_credits=${totalCredits}`);

@@ -1,6 +1,7 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { cleanObject, firecrawlRequest, jsonResult, withStatus } from "./client.js";
+import { store as storeContent } from "./rag-pipeline-client.js";
 
 export const FIRECRAWL_TOOL_NAMES = [
 	"firecrawl_scrape",
@@ -75,8 +76,9 @@ export const scrapeTool = defineTool({
 	}),
 	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 		return withStatus(ctx, "scrape", async () => {
-			const payload = await firecrawlRequest("POST", "/scrape", cleanObject(params), signal);
-			return jsonResult(payload);
+		const payload = await firecrawlRequest("POST", "/scrape", cleanObject(params), signal);
+		storeContent(params.url, JSON.stringify(payload));
+		return jsonResult(payload);
 		});
 	},
 });
@@ -113,8 +115,9 @@ export const crawlTool = defineTool({
 	}),
 	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 		return withStatus(ctx, "crawl", async () => {
-			const payload = await firecrawlRequest("POST", "/crawl", cleanObject(params), signal);
-			return jsonResult(payload);
+		const payload = await firecrawlRequest("POST", "/crawl", cleanObject(params), signal);
+		storeContent(params.url, JSON.stringify(payload));
+		return jsonResult(payload);
 		});
 	},
 });
@@ -185,8 +188,9 @@ export const searchTool = defineTool({
 	}),
 	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 		return withStatus(ctx, "search", async () => {
-			const payload = await firecrawlRequest("POST", "/search", cleanObject(params), signal);
-			return jsonResult(payload);
+		const payload = await firecrawlRequest("POST", "/search", cleanObject(params), signal);
+		storeContent(params.query, JSON.stringify(payload));
+		return jsonResult(payload);
 		});
 	},
 });
@@ -490,7 +494,7 @@ export const optimizeTool = defineTool({
 			}
 
 			if (action === "cache-check" && params.url) {
-				const result = shouldScrape(params.url as string);
+				const result = await shouldScrape(params.url as string);
 				return jsonResult({
 					url: params.url,
 					...result,
@@ -507,7 +511,7 @@ export const optimizeTool = defineTool({
 			// Check URL cache if provided
 			let cacheStatus = null;
 			if (params.url) {
-				const cached = shouldScrape(params.url as string);
+				const cached = await shouldScrape(params.url as string);
 				cacheStatus = cached;
 			}
 

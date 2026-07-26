@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
     "chunk_size": 512,
     "chunk_overlap": 50,
 }
+CONFIG_FILE = CACHE_DIR / 'config.json'
 # ─── Model State ──────────────────────────────────────────────────────────────
 _model = None
 _model_name = None
@@ -501,12 +502,13 @@ def main():
 
     elif command == "store":
         if len(sys.argv) < 4:
-            print("Usage: rag_pipeline.py store <url> <content>", file=sys.stderr)
+            print("Usage: rag_pipeline.py store <url> <content> [<title>] [<metadata_json>]", file=sys.stderr)
             sys.exit(1)
         url = sys.argv[2]
         content = sys.argv[3]
         title = sys.argv[4] if len(sys.argv) > 4 else ""
-        result = store_entry(url, content, title)
+        metadata = json.loads(sys.argv[5]) if len(sys.argv) > 5 else None
+        result = store_entry(url, content, title, metadata)
         print(json.dumps(result))
 
     elif command == "stats":

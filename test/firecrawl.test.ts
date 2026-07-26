@@ -39,13 +39,15 @@ test("firecrawl registers all tools and command", () => {
 
 	assert.deepEqual(
 		mock.tools.map((tool) => tool.name),
-		[
-			"firecrawl_scrape",
-			"firecrawl_crawl",
-			"firecrawl_crawl_status",
-			"firecrawl_map",
-			"firecrawl_search",
-		],
+	[
+		"firecrawl_scrape",
+		"firecrawl_crawl",
+		"firecrawl_crawl_status",
+		"firecrawl_map",
+		"firecrawl_search",
+		"firecrawl_parse",
+		"firecrawl_interact",
+	],
 	);
 	assert.ok(mock.commands.has("firecrawl"));
 	assert.deepEqual([...mock.events.keys()].sort(), ["session_shutdown", "session_start"]);
@@ -102,8 +104,8 @@ test("firecrawl helpers trim URLs, parse payloads, and remove undefined fields",
 });
 
 test("formatPersistedSelection summarizes all, none, and partial selections", () => {
-	assert.equal(formatPersistedSelection([]), "all disabled (0/5 selected)");
-	assert.equal(formatPersistedSelection(["firecrawl_scrape"]), "1/5 selected: firecrawl_scrape");
+	assert.equal(formatPersistedSelection([]), "all disabled (0/7 selected)");
+	assert.equal(formatPersistedSelection(["firecrawl_scrape"]), "1/7 selected: firecrawl_scrape");
 });
 
 test("firecrawl installs migrated settings exclusively without leaving temp files", async () => {

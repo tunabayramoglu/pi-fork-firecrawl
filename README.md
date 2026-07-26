@@ -37,8 +37,7 @@ export FIRECRAWL_API_KEY=fc-your-key
 ```
 
 ### Multi-key (config file)
-
-Add a `keys` array to `~/.pi/agent/pi-firecrawl.json`:
+Add a `keys` array to `~/.pi/agent/pi-firecrawl-keys.json`:
 
 ```json
 {

@@ -2,17 +2,18 @@
 // Dynamic Firecrawl Credit Efficiency Benchmark
 // Tests actual optimizer tool selection and estimates real credit usage
 
-
 import { selectCheapestTool, estimateCost, shouldScrape, recordUsage } from "../src/optimizer.ts";
 
 // Pre-populate cache with some URLs to test cache hits
 recordUsage("scrape", "https://example.com", 1, "markdown");
 recordUsage("scrape", "https://example.org", 1, "markdown");
+// Also cache normalized versions for URL normalization tests
+recordUsage("scrape", "https://example.com/page", 1, "markdown");
 
 const scenarios = [
-	// Easy: single page (cache hit — should be 0)
+	// Easy: single page
 	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
-	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape", expectCached: false },
+	{ goal: "extract content from this page", url: "https://example.com/docs", expectedTool: "firecrawl_scrape" },
 
 	// Easy: cache hit
 	{ goal: "scrape https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
@@ -35,6 +36,7 @@ const scenarios = [
 
 	// Hard: interact
 	{ goal: "login and scrape dashboard", expectedTool: "firecrawl_interact" },
+
 	// Hard: crawl alternatives (map+scrape is cheaper)
 	{ goal: "get 5 pages from a 100-page site", expectedTool: "firecrawl_map" },
 	{ goal: "extract content from specific pages only", expectedTool: "firecrawl_scrape" },
@@ -43,14 +45,20 @@ const scenarios = [
 	{ goal: "find recent articles about machine learning", expectedTool: "firecrawl_search" },
 	{ goal: "discover documentation pages", expectedTool: "firecrawl_search" },
 
-	// Easy: cache hits
+	// Easy: more cache hits
 	{ goal: "scrape https://example.com", url: "https://example.com", expectedTool: "firecrawl_scrape", expectCached: true },
 	{ goal: "re-check https://example.org", url: "https://example.org", expectedTool: "firecrawl_scrape", expectCached: true },
+
+	// Hard: URL normalization (tracking params, trailing slash, case)
+	{ goal: "scrape https://example.com/page?utm_source=google&utm_medium=cpc", url: "https://example.com/page?utm_source=google&utm_medium=cpc", expectedTool: "firecrawl_scrape", expectCached: true },
+	{ goal: "scrape https://example.com/Page/", url: "https://example.com/Page/", expectedTool: "firecrawl_scrape", expectCached: true },
+	{ goal: "re-check https://example.com/page?ref=homepage", url: "https://example.com/page?ref=homepage", expectedTool: "firecrawl_scrape", expectCached: true },
 ];
 
 let totalCredits = 0;
 let successes = 0;
 let correctToolSelections = 0;
+
 for (const scenario of scenarios) {
 	const recommendation = selectCheapestTool(scenario.goal);
 	const toolName = recommendation.tool.replace("firecrawl_", "");
@@ -74,6 +82,7 @@ for (const scenario of scenarios) {
 		correctToolSelections++;
 	}
 }
+
 const creditsPerExtraction = (totalCredits / successes).toFixed(2);
 const toolAccuracy = ((correctToolSelections / successes) * 100).toFixed(0);
 

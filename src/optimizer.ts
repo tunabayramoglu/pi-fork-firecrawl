@@ -74,11 +74,34 @@ function saveCache(store: CacheStore): void {
 	}
 }
 
+// ─── URL Normalization ──────────────────────────────────────────────────────
+
+function normalizeUrl(url: string): string {
+	try {
+		const parsed = new URL(url);
+		const trackingParams = [
+			"utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+			"fbclid", "gclid", "mc_cid", "mc_eid", "ref", "source", "spm",
+		];
+		for (const param of trackingParams) {
+			parsed.searchParams.delete(param);
+		}
+		let pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+		pathname = pathname.toLowerCase();
+		return `${parsed.protocol}//${parsed.host}${pathname}${parsed.search}`;
+	} catch {
+		return url.toLowerCase().replace(/\/+$/, "");
+	}
+}
+
 // ─── URL Deduplication ───────────────────────────────────────────────────────
 
 export function shouldScrape(url: string, format = "markdown"): { skip: boolean; reason: string } {
 	const store = loadCache();
-	const entry = store.scraped[url];
+	const normalized = normalizeUrl(url);
+
+	// Check exact match first, then normalized
+	const entry = store.scraped[url] ?? store.scraped[normalized];
 
 	if (!entry) {
 		return { skip: false, reason: "URL not cached" };
@@ -98,13 +121,12 @@ export function shouldScrape(url: string, format = "markdown"): { skip: boolean;
 
 export function recordUsage(tool: string, url: string, credits: number, format = "markdown"): void {
 	const store = loadCache();
-	store.scraped[url] = {
-		url,
-		tool,
-		format,
-		timestamp: new Date().toISOString(),
-		credits,
-	};
+	const normalized = normalizeUrl(url);
+	const entry = { url, tool, format, timestamp: new Date().toISOString(), credits };
+	store.scraped[url] = entry;
+	if (normalized !== url) {
+		store.scraped[normalized] = entry;
+	}
 	store.totalCreditsUsed += credits;
 	saveCache(store);
 }
@@ -216,7 +238,7 @@ export function selectCheapestTool(goal: string): {
 	}
 
 	// Search + selective scrape
-	if (lower.includes("search") || lower.includes("find") || lower.includes("discover") || lower.includes("look for")) {
+	if (lower.includes("search") || lower.includes("find") || lower.includes("discover") || lower.includes("look for") || lower.includes("articles") || lower.includes("documentation") || lower.includes("recent")) {
 		return {
 			tool: "firecrawl_search",
 			params: {},

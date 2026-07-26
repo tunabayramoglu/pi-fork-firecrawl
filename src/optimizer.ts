@@ -167,18 +167,18 @@ export function estimateCost(tool: string, params: Record<string, unknown>): Cos
 			};
 		}
 
-		case "interact": {
-			const ttl = (params.ttl as number) ?? 300;
-			const minutes = Math.ceil(ttl / 60);
-			const cost = minutes * baseCost;
-			return {
-				tool,
-				estimatedCredits: cost,
-				reason: `${minutes} min x ${baseCost} credits/min = ${cost} credits`,
-				cheaperAlternative: "scrape with actions",
-				alternativeSavings: Math.max(0, cost - 1),
-			};
-		}
+	case "interact": {
+		const ttl = (params.ttl as number) ?? 60; // default 1 min, not 5
+		const minutes = Math.ceil(ttl / 60);
+		const cost = minutes * baseCost;
+		return {
+			tool,
+			estimatedCredits: cost,
+			reason: `${minutes} min x ${baseCost} credits/min = ${cost} credits`,
+			cheaperAlternative: "scrape with actions",
+			alternativeSavings: Math.max(0, cost - 1),
+		};
+	}
 
 		case "parse": {
 			return {
@@ -239,6 +239,15 @@ export function selectCheapestTool(goal: string): {
 			tool: "firecrawl_parse",
 			params: {},
 			reason: "Parse handles local files directly.",
+		};
+	}
+
+	// Needs interaction — use interact (last resort before default)
+	if (lower.includes("login") || lower.includes("sign in") || lower.includes("form") || lower.includes("click") || lower.includes("navigate")) {
+		return {
+			tool: "firecrawl_interact",
+			params: {},
+			reason: "Interaction needed (login, forms, clicks). Scrape with actions may also work.",
 		};
 	}
 
